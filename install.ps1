@@ -9,7 +9,7 @@
     handled by setup.py.
 
 .EXAMPLE
-    .\install.ps1 -Prefix "$env:USERPROFILE\.claude\redmatter\python" `
+    .\install.ps1 -Prefix "$env:USERPROFILE\.local\redmatter\python" `
                   -MinPython "3.10" -UvEnv "REDMATTER_UV" -PythonEnv "REDMATTER_PYTHON"
 #>
 param(

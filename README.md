@@ -4,7 +4,7 @@
 
 # Managed Python
 
-Bootstrap `uv` and a managed Python runtime to a configurable prefix. Provides a predictable Python environment for Claude Code customisation scripts and other tools.
+Bootstrap `uv` and a managed Python runtime to a configurable prefix. Provides a predictable, isolated Python environment for scripts and tools across Linux, macOS, and Windows.
 
 ## How it works
 
@@ -39,24 +39,24 @@ Expand-Archive managed-python.zip
 
 ```bash
 ./install.sh \
-  --prefix ~/.claude/redmatter/python \
+  --prefix ~/.local/redmatter/python \
   --min-python 3.10 \
   --uv-env REDMATTER_UV \
   --python-env REDMATTER_PYTHON
 
-source ~/.claude/redmatter/python/env.sh
+source ~/.local/redmatter/python/env.sh
 ```
 
 **Windows (PowerShell):**
 
 ```powershell
 .\install.ps1 `
-  -Prefix "$env:USERPROFILE\.claude\redmatter\python" `
+  -Prefix "$env:USERPROFILE\.local\redmatter\python" `
   -MinPython "3.10" `
   -UvEnv "REDMATTER_UV" `
   -PythonEnv "REDMATTER_PYTHON"
 
-. "$env:USERPROFILE\.claude\redmatter\python\env.ps1"
+. "$env:USERPROFILE\.local\redmatter\python\env.ps1"
 ```
 
 > [!NOTE]
@@ -64,15 +64,17 @@ source ~/.claude/redmatter/python/env.sh
 > `install.bat` to install, then load the environment using one of the options below depending on your shell.
 >
 > **PowerShell** — evaluate `env.ps1` as a string (bypasses script execution policy):
+>
 > ```powershell
-> install.bat -Prefix "$env:USERPROFILE\.claude\redmatter\python" -MinPython "3.10" -UvEnv "REDMATTER_UV" -PythonEnv "REDMATTER_PYTHON"
-> Invoke-Expression (Get-Content "$env:USERPROFILE\.claude\redmatter\python\env.ps1" -Raw)
+> install.bat -Prefix "$env:USERPROFILE\.local\redmatter\python" -MinPython "3.10" -UvEnv "REDMATTER_UV" -PythonEnv "REDMATTER_PYTHON"
+> Invoke-Expression (Get-Content "$env:USERPROFILE\.local\redmatter\python\env.ps1" -Raw)
 > ```
 >
 > **CMD** — use `call` to load `env.bat` into the current session:
+>
 > ```bat
-> install.bat -Prefix "%USERPROFILE%\.claude\redmatter\python" -MinPython "3.10" -UvEnv "REDMATTER_UV" -PythonEnv "REDMATTER_PYTHON"
-> call "%USERPROFILE%\.claude\redmatter\python\env.bat"
+> install.bat -Prefix "%USERPROFILE%\.local\redmatter\python" -MinPython "3.10" -UvEnv "REDMATTER_UV" -PythonEnv "REDMATTER_PYTHON"
+> call "%USERPROFILE%\.local\redmatter\python\env.bat"
 > ```
 >
 > To remove the restriction permanently, run in an elevated PowerShell prompt:
@@ -82,13 +84,13 @@ source ~/.claude/redmatter/python/env.sh
 
 ```bash
 ./install.sh \
-  --prefix ~/.claude/redmatter/python \
+  --prefix ~/.local/redmatter/python \
   --min-python 3.10 \
   --uv-env REDMATTER_UV \
   --python-env REDMATTER_PYTHON \
   --quiet
 
-source ~/.claude/redmatter/python/env.sh
+source ~/.local/redmatter/python/env.sh
 "$REDMATTER_PYTHON" /path/to/script.py
 ```
 
@@ -110,7 +112,7 @@ source ~/.claude/redmatter/python/env.sh
 "$REDMATTER_PYTHON" /path/to/script.py
 
 # Run a script with dependencies (pyproject.toml in app dir)
-"$REDMATTER_UV" run --project ~/.claude/my-app my-script.py
+"$REDMATTER_UV" run --project /path/to/app my-script.py
 
 # Install a package into the shared venv (use sparingly)
 "$REDMATTER_UV" pip install --python "$REDMATTER_PYTHON" some-package
@@ -149,7 +151,7 @@ version = "1.0.0"
 uv_version = "0.10.6"
 
 [install]
-prefix       = "/home/user/.claude/redmatter/python"
+prefix       = "/home/user/.local/redmatter/python"
 min_python   = "3.10"
 uv_env       = "REDMATTER_UV"
 python_env   = "REDMATTER_PYTHON"
@@ -159,6 +161,7 @@ shell_profile = false
 ## Idempotency
 
 Re-running `install.sh` with the same args is always safe:
+
 - uv download skipped if pinned version already installed
 - venv creation skipped if `venv/bin/python` already works
 - All generated files (`env.sh`, `env.ps1`, `bin/`, `distro.toml`) are always regenerated (cheap, ensures correctness)
@@ -166,6 +169,7 @@ Re-running `install.sh` with the same args is always safe:
 ## Versioning
 
 `distro.toml` `version` tracks the managed-python configuration itself:
+
 - **Patch** (1.0.x) — no-op fixes
 - **Minor** (1.x.0) — new flags, new generated files, non-breaking additions
 - **Major** (x.0.0) — breaking layout change; delete prefix dir and reinstall

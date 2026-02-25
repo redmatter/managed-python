@@ -2,7 +2,7 @@
   <img src="img/logo.png" alt="managed-python" width="200" />
 </p>
 
-# managed-python
+# Managed Python
 
 Bootstrap `uv` and a managed Python runtime to a configurable prefix. Provides a predictable Python environment for Claude Code customisation scripts and other tools.
 

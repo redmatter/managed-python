@@ -32,6 +32,13 @@ def _toml_get(path: Path, key: str) -> str:
 
 # ── Output ────────────────────────────────────────────────────────────────────
 
+def _banner(msg: str) -> None:
+    width = len(msg) + 4  # 2 spaces padding each side
+    print(f"┌{'─' * width}┐")
+    print(f"│  {msg}  │")
+    print(f"└{'─' * width}┘")
+
+
 def _ok(msg: str) -> None:
     print(f"  \u2713 {msg}")
 
@@ -268,9 +275,7 @@ def main() -> None:
 
     env_sh = prefix / "env.sh"
     print()
-    print("\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510")
-    print("\u2502  Install complete!                       \u2502")
-    print("\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518")
+    _banner("Install complete!")
     print()
     print(f'  source "{env_sh}"')
     print()

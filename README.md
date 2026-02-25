@@ -59,6 +59,18 @@ source ~/.claude/redmatter/python/env.sh
 . "$env:USERPROFILE\.claude\redmatter\python\env.ps1"
 ```
 
+> [!NOTE]
+> If your system blocks PowerShell scripts (`running scripts is disabled on this system`), use
+> `install.bat` instead of `install.ps1`, and source the environment with `call` instead of dot-sourcing:
+>
+> ```bat
+> install.bat -Prefix "%USERPROFILE%\.claude\redmatter\python" -MinPython "3.10" -UvEnv "REDMATTER_UV" -PythonEnv "REDMATTER_PYTHON"
+> call "%USERPROFILE%\.claude\redmatter\python\env.bat"
+> ```
+>
+> To remove the restriction permanently, run in an elevated PowerShell prompt:
+> `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
+
 **Scripted install (quiet mode):**
 
 ```bash
@@ -116,6 +128,7 @@ exec "$PYTHON" script.py
     Scripts/python.exe        # Windows
   env.sh                      # exports env vars + conditional PATH (bash)
   env.ps1                     # exports env vars + conditional PATH (PowerShell)
+  env.bat                     # exports env vars + conditional PATH (CMD / restricted PS)
   distro.toml                 # source version record + [install] options
 ```
 

@@ -46,8 +46,9 @@ _bootstrap_uv() {
     _msg "  → Downloading uv $uv_version"
     local url tmp target
     url="$(_uv_download_url "$uv_version")"
-    # Derive target triple from the URL for checksum lookup
+    # Derive target triple from the URL for checksum lookup (strip leading "uv-")
     target="$(basename "$url" .tar.gz)"
+    target="${target#uv-}"
     tmp="$(mktemp -d)"
     trap 'rm -rf "$tmp"; trap - RETURN' RETURN
 

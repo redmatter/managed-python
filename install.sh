@@ -28,8 +28,14 @@ _uv_download_url() {
         "$uv_version" "$target"
 }
 
+_uv_expected_hash() {
+    local distro_toml="$1" target="$2"
+    grep "^${target}" "$distro_toml" \
+        | sed -E 's/^[^=]+=\s*"([^"]+)".*/\1/'
+}
+
 _bootstrap_uv() {
-    local prefix="$1" uv_version="$2"
+    local prefix="$1" uv_version="$2" distro_toml="$3"
     local uv_bin="${prefix}/uv"
 
     if [[ -x "$uv_bin" ]] && \
@@ -38,36 +44,38 @@ _bootstrap_uv() {
     fi
 
     _msg "  → Downloading uv $uv_version"
-    local url tmp
+    local url tmp target
     url="$(_uv_download_url "$uv_version")"
+    # Derive target triple from the URL for checksum lookup
+    target="$(basename "$url" .tar.gz)"
     tmp="$(mktemp -d)"
     trap 'rm -rf "$tmp"; trap - RETURN' RETURN
 
     if command -v curl &>/dev/null; then
-        curl -fsSL "$url"          -o "${tmp}/uv.tar.gz"        \
+        curl -fsSL "$url" -o "${tmp}/uv.tar.gz" \
             || { printf "ERROR: Failed to download uv %s\n" "$uv_version" >&2; exit 1; }
-        curl -fsSL "${url}.sha256" -o "${tmp}/uv.tar.gz.sha256" \
-            || { printf "ERROR: Failed to download uv %s checksum\n" "$uv_version" >&2; exit 1; }
     elif command -v wget &>/dev/null; then
-        wget -qO "${tmp}/uv.tar.gz"        "$url"          \
+        wget -qO "${tmp}/uv.tar.gz" "$url" \
             || { printf "ERROR: Failed to download uv %s\n" "$uv_version" >&2; exit 1; }
-        wget -qO "${tmp}/uv.tar.gz.sha256" "${url}.sha256" \
-            || { printf "ERROR: Failed to download uv %s checksum\n" "$uv_version" >&2; exit 1; }
     else
         printf "ERROR: curl or wget required\n" >&2; exit 1
     fi
 
-    local expected_hash actual_hash=""
-    expected_hash="$(awk '{print $1}' "${tmp}/uv.tar.gz.sha256")"
+    local expected_hash actual_hash
+    expected_hash="$(_uv_expected_hash "$distro_toml" "$target")"
+    if [[ -z "$expected_hash" ]]; then
+        printf "ERROR: no pinned checksum for target %s in distro.toml\n" "$target" >&2; exit 1
+    fi
     if command -v sha256sum &>/dev/null; then
         actual_hash="$(sha256sum "${tmp}/uv.tar.gz" | awk '{print $1}')"
     elif command -v shasum &>/dev/null; then
         actual_hash="$(shasum -a 256 "${tmp}/uv.tar.gz" | awk '{print $1}')"
     else
-        printf "  ⚠ sha256sum/shasum not found — skipping checksum verification\n" >&2
+        printf "ERROR: sha256sum or shasum is required for checksum verification\n" >&2; exit 1
     fi
-    if [[ -n "$actual_hash" && "$actual_hash" != "$expected_hash" ]]; then
-        printf "ERROR: uv %s checksum verification failed\n" "$uv_version" >&2; exit 1
+    if [[ "$actual_hash" != "$expected_hash" ]]; then
+        printf "ERROR: uv %s checksum verification failed\n  expected: %s\n  actual:   %s\n" \
+            "$uv_version" "$expected_hash" "$actual_hash" >&2; exit 1
     fi
 
     tar -xzf "${tmp}/uv.tar.gz" -C "$tmp"
@@ -130,7 +138,7 @@ main() {
     _msg "  prefix  $prefix"
     _msg ""
 
-    _bootstrap_uv   "$prefix" "$uv_version"
+    _bootstrap_uv   "$prefix" "$uv_version" "${script_dir}/distro.toml"
     _bootstrap_venv "$prefix" "$min_python"
 
     _msg ""

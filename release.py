@@ -15,7 +15,17 @@ import argparse
 import re
 import subprocess
 import sys
+import urllib.request
 from pathlib import Path
+
+_UV_TARGETS = [
+    ("x86_64-unknown-linux-gnu",  "tar.gz"),
+    ("aarch64-unknown-linux-gnu", "tar.gz"),
+    ("x86_64-apple-darwin",       "tar.gz"),
+    ("aarch64-apple-darwin",      "tar.gz"),
+    ("x86_64-pc-windows-msvc",    "zip"),
+    ("aarch64-pc-windows-msvc",   "zip"),
+]
 
 DISTRO_TOML = Path(__file__).parent / "distro.toml"
 
@@ -54,6 +64,41 @@ def _run(cmd: list[str]) -> None:
         raise SystemExit(f"ERROR: {' '.join(cmd)} failed")
 
 
+def _fetch_uv_checksums(uv_version: str) -> dict[str, str]:
+    """Fetch SHA256 checksums for all uv platform targets from GitHub releases."""
+    checksums: dict[str, str] = {}
+    base = f"https://github.com/astral-sh/uv/releases/download/{uv_version}"
+    for target, ext in _UV_TARGETS:
+        url = f"{base}/uv-{target}.{ext}.sha256"
+        print(f"  fetching checksum: {target}", flush=True)
+        try:
+            with urllib.request.urlopen(url) as resp:
+                checksums[target] = resp.read().decode().split()[0]
+        except Exception as e:
+            raise SystemExit(f"ERROR: failed to fetch checksum for {target}: {e}") from e
+    return checksums
+
+
+def _set_uv_checksums(text: str, checksums: dict[str, str]) -> str:
+    """Replace or append the [uv_checksums] section in distro.toml content."""
+    section_lines = ["[uv_checksums]"]
+    for target, ext in _UV_TARGETS:
+        section_lines.append(f'{target:<34}= "{checksums[target]}"')
+    new_section = "\n".join(section_lines) + "\n"
+
+    # Replace existing section if present
+    replaced = re.sub(
+        r"\[uv_checksums\][^\[]*",
+        new_section + "\n",
+        text,
+        flags=re.DOTALL,
+    )
+    if replaced != text:
+        return replaced
+    # Append if not present
+    return text.rstrip() + "\n\n" + new_section
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description="Bump managed-python version in distro.toml")
     bump = p.add_mutually_exclusive_group()
@@ -80,7 +125,7 @@ def main() -> None:
 
     print(f"  distro version : {old_version} -> {new_version}" if new_version != old_version
           else f"  distro version : {old_version} (unchanged)")
-    print(f"  uv version     : {old_uv} -> {new_uv}" if new_uv != old_uv
+    print(f"  uv version     : {old_uv} -> {new_uv} (checksums will be fetched)" if new_uv != old_uv
           else f"  uv version     : {old_uv} (unchanged)")
 
     if new_version == old_version and new_uv == old_uv:
@@ -102,6 +147,12 @@ def main() -> None:
 
     text = _set_toml_field(text, "version",    new_version)
     text = _set_toml_field(text, "uv_version", new_uv)
+
+    if new_uv != old_uv:
+        print(f"  fetching checksums for uv {new_uv}...")
+        checksums = _fetch_uv_checksums(new_uv)
+        text = _set_uv_checksums(text, checksums)
+
     DISTRO_TOML.write_text(text, encoding="utf-8")
     print(f"  updated distro.toml")
 

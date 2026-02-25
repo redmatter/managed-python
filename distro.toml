@@ -1,3 +1,13 @@
 [distro]
 version = "0.6.0"      # bump on meaningful config changes; major = breaking (requires reinstall)
 uv_version = "0.10.6"  # pinned uv release
+
+# SHA256 checksums for the pinned uv release archives.
+# Update these whenever uv_version changes (run: release.py --uv-version X.Y.Z).
+[uv_checksums]
+x86_64-unknown-linux-gnu   = "aaa402e19d14a6b9a4267fcf4ec35380f804c68923525cea67cd6ee05bb4e930"
+aarch64-unknown-linux-gnu  = "9380705294a85e3e634570abddd5b2577900c1873c29b790c7abc56a81dce4bc"
+x86_64-apple-darwin        = "d7647571fb17a5107d4d23cc190418039c157fd7361ddb59bc6f8127a49e3eac"
+aarch64-apple-darwin       = "3993249d8f51deaf34cfce037e57e294e82267ff1f9dc45b7983a17afaf065b4"
+x86_64-pc-windows-msvc     = "b27eb789f281e398a82197477de727fc8faf08605152115686da2c3cba0d25f7"
+aarch64-pc-windows-msvc    = "e431c9a4f8d66e872f6640500cbbf1af20418720b78ac01404399ac810ef2e46"

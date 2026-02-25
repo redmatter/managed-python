@@ -85,7 +85,9 @@ if (Test-Path $VenvPy) {
     Write-Msg "  ✓ venv already exists"
 } else {
     Write-Msg "  → Creating Python $MinPython venv"
-    & $UvExe venv --python $MinPython (Join-Path $Prefix "venv")
+    $venvArgs = @("venv", "--python", $MinPython)
+    if ($Quiet) { $venvArgs += "--quiet" }
+    & $UvExe @venvArgs (Join-Path $Prefix "venv")
     if ($LASTEXITCODE -ne 0) {
         Write-Error "Failed to create Python $MinPython venv — see uv error above"
         exit $LASTEXITCODE

@@ -315,8 +315,12 @@ def main() -> None:
         else:
             print(f'  source "{prefix / "env.sh"}"')
         print()
-        print(f'  Then:  "${args.python_env}" /path/to/script.py')
-        print(f'         "${args.uv_env}" run --project /path/to/app script.py')
+        if _IS_WINDOWS:
+            print(f'  Then:  $env:{args.python_env} /path/to/script.py')
+            print(f'         $env:{args.uv_env} run --project /path/to/app script.py')
+        else:
+            print(f'  Then:  "${args.python_env}" /path/to/script.py')
+            print(f'         "${args.uv_env}" run --project /path/to/app script.py')
         print()
 
 

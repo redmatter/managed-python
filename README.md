@@ -61,8 +61,15 @@ source ~/.claude/redmatter/python/env.sh
 
 > [!NOTE]
 > If your system blocks PowerShell scripts (`running scripts is disabled on this system`), use
-> `install.bat` instead of `install.ps1`, and source the environment with `call` instead of dot-sourcing:
+> `install.bat` to install, then load the environment using one of the options below depending on your shell.
 >
+> **PowerShell** — evaluate `env.ps1` as a string (bypasses script execution policy):
+> ```powershell
+> install.bat -Prefix "$env:USERPROFILE\.claude\redmatter\python" -MinPython "3.10" -UvEnv "REDMATTER_UV" -PythonEnv "REDMATTER_PYTHON"
+> Invoke-Expression (Get-Content "$env:USERPROFILE\.claude\redmatter\python\env.ps1" -Raw)
+> ```
+>
+> **CMD** — use `call` to load `env.bat` into the current session:
 > ```bat
 > install.bat -Prefix "%USERPROFILE%\.claude\redmatter\python" -MinPython "3.10" -UvEnv "REDMATTER_UV" -PythonEnv "REDMATTER_PYTHON"
 > call "%USERPROFILE%\.claude\redmatter\python\env.bat"

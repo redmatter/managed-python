@@ -346,7 +346,9 @@ def main() -> None:
         print()
         if _IS_WINDOWS:
             print(f'  . "{prefix / "env.ps1"}"')
-            print(f'  or (if scripts are restricted):  call "{prefix / "env.bat"}"')
+            print(f'  or (PowerShell, if scripts are restricted):')
+            print(f'    Invoke-Expression (Get-Content "{prefix / "env.ps1"}" -Raw)')
+            print(f'  or (CMD):  call "{prefix / "env.bat"}"')
         else:
             print(f'  source "{prefix / "env.sh"}"')
         print()

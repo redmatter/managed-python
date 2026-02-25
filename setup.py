@@ -68,8 +68,14 @@ def _path_decision(bin_dir: Path) -> tuple[bool, list[str]]:
         bin directory should be prepended to PATH, and note_lines is a list of
         human-readable notes explaining the decision.
     """
-    python_found = shutil.which("python") or shutil.which("python3")
-    uv_found = shutil.which("uv")
+    def _real_executable(path: str | None) -> str | None:
+        """Return path only if it is a non-empty file (filters Windows App Execution Alias stubs)."""
+        if path and Path(path).stat().st_size > 0:
+            return path
+        return None
+
+    python_found = _real_executable(shutil.which("python")) or _real_executable(shutil.which("python3"))
+    uv_found = _real_executable(shutil.which("uv"))
 
     if python_found and uv_found:
         return False, [

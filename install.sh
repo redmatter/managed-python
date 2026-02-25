@@ -13,14 +13,6 @@
 # at the given prefix. Writes env.sh that exports env vars and optionally
 # adds prefix/bin to PATH.
 
-set -euo pipefail
-
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DISTRO_TOML="${SCRIPT_DIR}/distro.toml"
-
 # ---------------------------------------------------------------------------
 # Parse distro.toml (no external deps — pure bash)
 # ---------------------------------------------------------------------------
@@ -29,18 +21,6 @@ parse_toml_value() {
     local key="$2"
     grep -E "^${key}\s*=" "$file" | sed -E 's/^[^=]+=\s*"?([^"#]+)"?.*/\1/' | tr -d '[:space:]'
 }
-
-DISTRO_VERSION="$(parse_toml_value "$DISTRO_TOML" version)"
-UV_VERSION="$(parse_toml_value "$DISTRO_TOML" uv_version)"
-
-# ---------------------------------------------------------------------------
-# Argument parsing
-# ---------------------------------------------------------------------------
-PREFIX=""
-MIN_PYTHON=""
-UV_ENV_NAME=""
-PYTHON_ENV_NAME=""
-SHELL_PROFILE=false
 
 usage() {
     cat >&2 <<EOF
@@ -58,37 +38,6 @@ Optional:
 EOF
     exit 1
 }
-
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        --prefix)       PREFIX="$2";         shift 2 ;;
-        --min-python)   MIN_PYTHON="$2";     shift 2 ;;
-        --uv-env)       UV_ENV_NAME="$2";    shift 2 ;;
-        --python-env)   PYTHON_ENV_NAME="$2"; shift 2 ;;
-        --shell-profile) SHELL_PROFILE=true; shift ;;
-        --help|-h)      usage ;;
-        *) echo "Unknown flag: $1" >&2; usage ;;
-    esac
-done
-
-[[ -z "$PREFIX" ]]          && { echo "ERROR: --prefix is required" >&2; usage; }
-[[ -z "$MIN_PYTHON" ]]      && { echo "ERROR: --min-python is required" >&2; usage; }
-[[ -z "$UV_ENV_NAME" ]]     && { echo "ERROR: --uv-env is required" >&2; usage; }
-[[ -z "$PYTHON_ENV_NAME" ]] && { echo "ERROR: --python-env is required" >&2; usage; }
-
-# Expand tilde in prefix
-PREFIX="${PREFIX/#\~/$HOME}"
-
-# ---------------------------------------------------------------------------
-# Derived paths
-# ---------------------------------------------------------------------------
-UV_BIN="${PREFIX}/uv"
-VENV_DIR="${PREFIX}/venv"
-VENV_PYTHON="${VENV_DIR}/bin/python"
-BIN_DIR="${PREFIX}/bin"
-ENV_SH="${PREFIX}/env.sh"
-ENV_PS1="${PREFIX}/env.ps1"
-DISTRO_TOML_DEST="${PREFIX}/distro.toml"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -400,6 +349,58 @@ append_shell_profile() {
 # Main
 # ---------------------------------------------------------------------------
 main() {
+    set -euo pipefail
+
+    # ---------------------------------------------------------------------------
+    # Constants
+    # ---------------------------------------------------------------------------
+    local SCRIPT_DIR
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local DISTRO_TOML="${SCRIPT_DIR}/distro.toml"
+
+    DISTRO_VERSION="$(parse_toml_value "$DISTRO_TOML" version)"
+    UV_VERSION="$(parse_toml_value "$DISTRO_TOML" uv_version)"
+
+    # ---------------------------------------------------------------------------
+    # Argument parsing
+    # ---------------------------------------------------------------------------
+    PREFIX=""
+    MIN_PYTHON=""
+    UV_ENV_NAME=""
+    PYTHON_ENV_NAME=""
+    SHELL_PROFILE=false
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --prefix)       PREFIX="$2";         shift 2 ;;
+            --min-python)   MIN_PYTHON="$2";     shift 2 ;;
+            --uv-env)       UV_ENV_NAME="$2";    shift 2 ;;
+            --python-env)   PYTHON_ENV_NAME="$2"; shift 2 ;;
+            --shell-profile) SHELL_PROFILE=true; shift ;;
+            --help|-h)      usage ;;
+            *) echo "Unknown flag: $1" >&2; usage ;;
+        esac
+    done
+
+    [[ -z "$PREFIX" ]]          && { echo "ERROR: --prefix is required" >&2; usage; }
+    [[ -z "$MIN_PYTHON" ]]      && { echo "ERROR: --min-python is required" >&2; usage; }
+    [[ -z "$UV_ENV_NAME" ]]     && { echo "ERROR: --uv-env is required" >&2; usage; }
+    [[ -z "$PYTHON_ENV_NAME" ]] && { echo "ERROR: --python-env is required" >&2; usage; }
+
+    # Expand tilde in prefix
+    PREFIX="${PREFIX/#\~/$HOME}"
+
+    # ---------------------------------------------------------------------------
+    # Derived paths
+    # ---------------------------------------------------------------------------
+    UV_BIN="${PREFIX}/uv"
+    VENV_DIR="${PREFIX}/venv"
+    VENV_PYTHON="${VENV_DIR}/bin/python"
+    BIN_DIR="${PREFIX}/bin"
+    ENV_SH="${PREFIX}/env.sh"
+    ENV_PS1="${PREFIX}/env.ps1"
+    DISTRO_TOML_DEST="${PREFIX}/distro.toml"
+
     echo ""
     echo "managed-python v${DISTRO_VERSION}"
     echo "  prefix  ${PREFIX}"
@@ -426,4 +427,6 @@ main() {
     echo ""
 }
 
-main
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi

@@ -51,10 +51,14 @@ Write-Host "DBG: Test-Path UvExe = $(Test-Path $UvExe)"
 $currentVer = if (Test-Path $UvExe) { try { (& $UvExe --version 2>$null) -split " " | Select-Object -Last 1 } catch { "" } } else { "" }
 Write-Host "DBG: currentVer = '$currentVer'"
 
+Write-Host "DBG: comparison: ($currentVer) -eq ($UvVersion) = $($currentVer -eq $UvVersion)"
+Write-Host "DBG: UvVersion bytes: $([System.Text.Encoding]::UTF8.GetBytes($UvVersion) -join ',')"
 if ($currentVer -eq $UvVersion) {
-    Write-Host "  ✓ uv $UvVersion"
+    Write-Host "DBG: entering IF branch - uv already current"
+    Write-Host "  uv $UvVersion (already current)"
 } else {
-    Write-Host "  → Downloading uv $UvVersion"
+    Write-Host "DBG: entering ELSE branch - download needed"
+    Write-Host "  Downloading uv $UvVersion"
     $arch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "aarch64" } else { "x86_64" }
     $url  = "https://github.com/astral-sh/uv/releases/download/$UvVersion/uv-${arch}-pc-windows-msvc.zip"
     Write-Host "DBG: url = $url"
@@ -90,9 +94,9 @@ if ($currentVer -eq $UvVersion) {
 # Bootstrap venv
 Write-Host "DBG: Test-Path VenvPy = $(Test-Path $VenvPy)"
 if (Test-Path $VenvPy) {
-    Write-Host "  ✓ venv already exists"
+    Write-Host "  venv already exists"
 } else {
-    Write-Host "  → Creating Python $MinPython venv"
+    Write-Host "  Creating Python $MinPython venv"
     & $UvExe venv --python $MinPython (Join-Path $Prefix "venv")
     Write-Host "DBG: uv venv exited with LASTEXITCODE = $LASTEXITCODE"
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -104,7 +108,7 @@ if (Test-Path $VenvPy) {
         Write-Error "  ✗ venv created but python.exe not found at $VenvPy"
         exit 1
     }
-    Write-Host "  ✓ venv created"
+    Write-Host "  venv created"
 }
 
 Write-Host ""

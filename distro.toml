@@ -1,3 +1,3 @@
 [distro]
-version = "0.3.0"      # bump on meaningful config changes; major = breaking (requires reinstall)
+version = "0.4.0"      # bump on meaningful config changes; major = breaking (requires reinstall)
 uv_version = "0.10.6"  # pinned uv release

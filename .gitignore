@@ -26,3 +26,6 @@ htmlcov/
 # Type checking
 .mypy_cache/
 .ruff_cache/
+
+# Reports
+.coding-standards-report.md

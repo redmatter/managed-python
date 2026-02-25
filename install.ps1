@@ -53,8 +53,9 @@ if ($currentVer -eq $UvVersion) {
     New-Item -ItemType Directory -Force -Path $Prefix | Out-Null
     $tmp    = [IO.Path]::Combine([IO.Path]::GetTempPath(), [IO.Path]::ChangeExtension([IO.Path]::GetRandomFileName(), ".zip"))
     $tmpDir = "$tmp.dir"
-    $tomlContent  = Get-Content (Join-Path $ScriptDir "distro.toml") -Raw
-    $expectedHash = ($tomlContent | Select-String "^${arch}-pc-windows-msvc\s*=\s*`"([^`"]+)`"").Matches[0].Groups[1].Value.ToUpper()
+    $tomlMatch    = Get-Content (Join-Path $ScriptDir "distro.toml") |
+                        Select-String "^${arch}-pc-windows-msvc\s*=\s*`"([^`"]+)`""
+    $expectedHash = $tomlMatch.Matches[0].Groups[1].Value.ToUpper()
     if (-not $expectedHash) {
         Write-Error "No pinned checksum for ${arch}-pc-windows-msvc in distro.toml"
         exit 1

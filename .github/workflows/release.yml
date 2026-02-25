@@ -14,6 +14,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Verify tag matches distro.toml version
+        run: |
+          TOML_VERSION="$(grep '^version' distro.toml | sed -E 's/^[^=]+=\s*"([^"]+)".*/\1/')"
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          if [[ "$TAG_VERSION" != "$TOML_VERSION" ]]; then
+            echo "ERROR: tag ${GITHUB_REF_NAME} does not match distro.toml version ${TOML_VERSION}"
+            exit 1
+          fi
+
       - name: Build release archive
         run: |
           VERSION="${GITHUB_REF_NAME}"

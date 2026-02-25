@@ -85,10 +85,10 @@ if ($currentVer -eq $UvVersion) {
         Write-Host "DBG: temp files cleaned up"
     }
     if (-not (Test-Path $UvExe)) {
-        Write-Error "  ✗ uv download failed — $UvExe not found"
+        Write-Error "  uv download failed: $UvExe not found"
         exit 1
     }
-    Write-Host "  ✓ uv $UvVersion installed"
+    Write-Host "  uv $UvVersion installed"
 }
 
 # Bootstrap venv
@@ -105,7 +105,7 @@ if (Test-Path $VenvPy) {
         Write-Host "DBG: venv dir contents:"
         Get-ChildItem (Join-Path $Prefix "venv") -Recurse -ErrorAction SilentlyContinue |
             Select-Object FullName | ForEach-Object { Write-Host "  $($_.FullName)" }
-        Write-Error "  ✗ venv created but python.exe not found at $VenvPy"
+        Write-Error "  venv created but python.exe not found at $VenvPy"
         exit 1
     }
     Write-Host "  venv created"

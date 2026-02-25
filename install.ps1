@@ -59,11 +59,14 @@ if ($currentVer -eq $UvVersion) {
         Expand-Archive $tmp $tmpDir -Force
         $uvSrc = Get-ChildItem $tmpDir -Filter "uv.exe" -Recurse | Select-Object -First 1
         Copy-Item $uvSrc.FullName $UvExe -Force
+    } catch {
+        Write-Error "Failed to download uv $UvVersion from $url`: $_"
+        exit 1
     } finally {
         Remove-Item $tmp, $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
     }
     if (-not (Test-Path $UvExe)) {
-        Write-Error "  uv download failed: $UvExe not found"
+        Write-Error "Failed to download uv $UvVersion — binary not found after extraction"
         exit 1
     }
     Write-Msg "  ✓ uv $UvVersion installed"
@@ -75,9 +78,12 @@ if (Test-Path $VenvPy) {
 } else {
     Write-Msg "  → Creating Python $MinPython venv"
     & $UvExe venv --python $MinPython (Join-Path $Prefix "venv")
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Failed to create Python $MinPython venv — see uv error above"
+        exit $LASTEXITCODE
+    }
     if (-not (Test-Path $VenvPy)) {
-        Write-Error "  venv created but python.exe not found at $VenvPy"
+        Write-Error "Failed to create Python $MinPython venv — python.exe not found at $VenvPy"
         exit 1
     }
     Write-Msg "  ✓ venv created"

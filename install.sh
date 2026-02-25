@@ -44,9 +44,11 @@ _bootstrap_uv() {
     trap 'rm -rf "$tmp"' RETURN
 
     if command -v curl &>/dev/null; then
-        curl -fsSL "$url" -o "${tmp}/uv.tar.gz"
+        curl -fsSL "$url" -o "${tmp}/uv.tar.gz" \
+            || { printf "ERROR: Failed to download uv %s\n" "$uv_version" >&2; exit 1; }
     elif command -v wget &>/dev/null; then
-        wget -qO "${tmp}/uv.tar.gz" "$url"
+        wget -qO "${tmp}/uv.tar.gz" "$url" \
+            || { printf "ERROR: Failed to download uv %s\n" "$uv_version" >&2; exit 1; }
     else
         printf "ERROR: curl or wget required\n" >&2; exit 1
     fi
@@ -66,7 +68,8 @@ _bootstrap_venv() {
     fi
 
     _msg "  → Creating Python $min_python venv"
-    "${prefix}/uv" venv --python "$min_python" "${prefix}/venv"
+    "${prefix}/uv" venv --python "$min_python" "${prefix}/venv" \
+        || { printf "ERROR: Failed to create Python %s venv — see uv error above\n" "$min_python" >&2; exit 1; }
     _msg "  ✓ venv created"
 }
 

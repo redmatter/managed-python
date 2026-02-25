@@ -64,7 +64,7 @@ if ($currentVer -eq $UvVersion) {
     Write-Host "DBG: url = $url"
     New-Item -ItemType Directory -Force -Path $Prefix | Out-Null
     Write-Host "DBG: prefix dir created"
-    $tmp    = [IO.Path]::GetTempFileName()
+    $tmp    = [IO.Path]::Combine([IO.Path]::GetTempPath(), [IO.Path]::ChangeExtension([IO.Path]::GetRandomFileName(), ".zip"))
     $tmpDir = "$tmp.dir"
     Write-Host "DBG: tmp    = $tmp"
     Write-Host "DBG: tmpDir = $tmpDir"

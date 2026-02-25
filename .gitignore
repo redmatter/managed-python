@@ -29,3 +29,6 @@ htmlcov/
 
 # Reports
 .coding-standards-report.md
+
+# AI assistant guides (local development only)
+CLAUDE.md

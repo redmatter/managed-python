@@ -7,6 +7,8 @@
 # Bootstrap phase (this script): download uv, create venv.
 # Configuration phase (setup.py): env.sh, env.ps1, bin/ wrappers, shell profile.
 
+_msg() { [ "${quiet:-}" != "1" ] && printf "%s\n" "$1"; return 0; }
+
 _uv_download_url() {
     local uv_version="$1" os arch target
     case "$(uname -s)" in
@@ -32,10 +34,10 @@ _bootstrap_uv() {
 
     if [[ -x "$uv_bin" ]] && \
        [[ "$("$uv_bin" --version 2>/dev/null | awk '{print $2}')" == "$uv_version" ]]; then
-        printf "  ✓ uv %s\n" "$uv_version"; return
+        _msg "  ✓ uv $uv_version"; return
     fi
 
-    printf "  → Downloading uv %s\n" "$uv_version"
+    _msg "  → Downloading uv $uv_version"
     local url tmp
     url="$(_uv_download_url "$uv_version")"
     tmp="$(mktemp -d)"
@@ -53,19 +55,19 @@ _bootstrap_uv() {
     mkdir -p "$prefix"
     cp "$(find "$tmp" -name "uv" -type f | head -1)" "$uv_bin"
     chmod +x "$uv_bin"
-    printf "  ✓ uv %s installed\n" "$uv_version"
+    _msg "  ✓ uv $uv_version installed"
 }
 
 _bootstrap_venv() {
     local prefix="$1" min_python="$2"
 
     if [[ -x "${prefix}/venv/bin/python" ]]; then
-        printf "  ✓ venv already exists\n"; return
+        _msg "  ✓ venv already exists"; return
     fi
 
-    printf "  → Creating Python %s venv\n" "$min_python"
+    _msg "  → Creating Python $min_python venv"
     "${prefix}/uv" venv --python "$min_python" "${prefix}/venv"
-    printf "  ✓ venv created\n"
+    _msg "  ✓ venv created"
 }
 
 main() {
@@ -78,26 +80,29 @@ main() {
     uv_version="$(grep '^uv_version' "${script_dir}/distro.toml" \
         | sed -E 's/^[^=]+=\s*"?([^"#]+)"?.*/\1/' | tr -d '[:space:]')"
 
-    # Extract --prefix and --min-python for bootstrap (all flags forwarded to setup.py)
-    local prefix="" min_python=""
+    # Extract --prefix, --min-python, and --quiet for bootstrap (all flags forwarded to setup.py)
+    local prefix="" min_python="" quiet=""
     local i
     for (( i=1; i<=$#; i++ )); do
         case "${!i}" in
             --prefix)     j=$((i+1)); prefix="${!j}";      prefix="${prefix/#\~/$HOME}" ;;
             --min-python) j=$((i+1)); min_python="${!j}" ;;
+            --quiet|-q)   quiet=1 ;;
         esac
     done
 
     [[ -z "$prefix" ]]     && { printf "ERROR: --prefix is required\n" >&2; exit 1; }
     [[ -z "$min_python" ]] && { printf "ERROR: --min-python is required\n" >&2; exit 1; }
 
-    printf "\nmanaged-python bootstrap\n"
-    printf "  prefix  %s\n\n" "$prefix"
+    _msg ""
+    _msg "managed-python bootstrap"
+    _msg "  prefix  $prefix"
+    _msg ""
 
     _bootstrap_uv   "$prefix" "$uv_version"
     _bootstrap_venv "$prefix" "$min_python"
 
-    printf "\n"
+    _msg ""
     exec "${prefix}/venv/bin/python" "${script_dir}/setup.py" "$@"
 }
 

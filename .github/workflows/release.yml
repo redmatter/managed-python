@@ -1,0 +1,31 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build release archive
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          zip "managed-python-${VERSION}.zip" \
+            distro.toml install.sh install.ps1 install.bat setup.py
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          gh release create "$VERSION" \
+            "managed-python-${VERSION}.zip" \
+            --title "$VERSION" \
+            --generate-notes

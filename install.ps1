@@ -17,8 +17,11 @@ param(
     [Parameter(Mandatory=$true)]  [string]$MinPython,
     [Parameter(Mandatory=$true)]  [string]$UvEnv,
     [Parameter(Mandatory=$true)]  [string]$PythonEnv,
-    [switch]$ShellProfile
+    [switch]$ShellProfile,
+    [switch]$Quiet
 )
+
+function Write-Msg($msg) { if (-not $Quiet) { Write-Host $msg } }
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -34,17 +37,17 @@ $UvVersion = (Get-Content (Join-Path $ScriptDir "distro.toml") |
     -replace '^[^=]+=\s*"?([^"#]+)"?.*', '$1' |
     ForEach-Object { $_.Trim() }
 
-Write-Host ""
-Write-Host "managed-python bootstrap"
-Write-Host "  prefix  $Prefix"
-Write-Host ""
+Write-Msg ""
+Write-Msg "managed-python bootstrap"
+Write-Msg "  prefix  $Prefix"
+Write-Msg ""
 
 # Bootstrap uv
 $currentVer = if (Test-Path $UvExe) { try { (& $UvExe --version 2>$null) -split " " | Select-Object -Last 1 } catch { "" } } else { "" }
 if ($currentVer -eq $UvVersion) {
-    Write-Host "  ✓ uv $UvVersion"
+    Write-Msg "  ✓ uv $UvVersion"
 } else {
-    Write-Host "  → Downloading uv $UvVersion"
+    Write-Msg "  → Downloading uv $UvVersion"
     $arch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "aarch64" } else { "x86_64" }
     $url  = "https://github.com/astral-sh/uv/releases/download/$UvVersion/uv-${arch}-pc-windows-msvc.zip"
     New-Item -ItemType Directory -Force -Path $Prefix | Out-Null
@@ -63,27 +66,28 @@ if ($currentVer -eq $UvVersion) {
         Write-Error "  uv download failed: $UvExe not found"
         exit 1
     }
-    Write-Host "  ✓ uv $UvVersion installed"
+    Write-Msg "  ✓ uv $UvVersion installed"
 }
 
 # Bootstrap venv
 if (Test-Path $VenvPy) {
-    Write-Host "  ✓ venv already exists"
+    Write-Msg "  ✓ venv already exists"
 } else {
-    Write-Host "  → Creating Python $MinPython venv"
+    Write-Msg "  → Creating Python $MinPython venv"
     & $UvExe venv --python $MinPython (Join-Path $Prefix "venv")
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     if (-not (Test-Path $VenvPy)) {
         Write-Error "  venv created but python.exe not found at $VenvPy"
         exit 1
     }
-    Write-Host "  ✓ venv created"
+    Write-Msg "  ✓ venv created"
 }
 
-Write-Host ""
+Write-Msg ""
 
 # Hand off to setup.py
 $setupArgs = @("--prefix", $Prefix, "--min-python", $MinPython, "--uv-env", $UvEnv, "--python-env", $PythonEnv)
 if ($ShellProfile) { $setupArgs += "--shell-profile" }
+if ($Quiet) { $setupArgs += "--quiet" }
 & $VenvPy (Join-Path $ScriptDir "setup.py") @setupArgs
 exit $LASTEXITCODE

@@ -17,6 +17,7 @@ import sys
 from pathlib import Path
 
 _IS_WINDOWS = sys.platform == "win32"
+_QUIET = False
 
 
 # ── TOML (minimal key=value reader, no deps) ─────────────────────────────────
@@ -33,6 +34,8 @@ def _toml_get(path: Path, key: str) -> str:
 # ── Output ────────────────────────────────────────────────────────────────────
 
 def _banner(msg: str) -> None:
+    if _QUIET:
+        return
     width = len(msg) + 4  # 2 spaces padding each side
     print(f"┌{'─' * width}┐")
     print(f"│  {msg}  │")
@@ -40,10 +43,14 @@ def _banner(msg: str) -> None:
 
 
 def _ok(msg: str) -> None:
+    if _QUIET:
+        return
     print(f"  \u2713 {msg}")
 
 
 def _info(msg: str) -> None:
+    if _QUIET:
+        return
     print(f"  \u2139 {msg}")
 
 
@@ -52,6 +59,8 @@ def _warn(msg: str) -> None:
 
 
 def _step(msg: str) -> None:
+    if _QUIET:
+        return
     print(f"\n==> {msg}")
 
 
@@ -259,11 +268,15 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--uv-env",       required=True, dest="uv_env",     help="Env var name for uv path")
     p.add_argument("--python-env",   required=True, dest="python_env", help="Env var name for python path")
     p.add_argument("--shell-profile", action="store_true", dest="shell_profile")
+    p.add_argument("--quiet", "-q", action="store_true", dest="quiet",
+                   help="Suppress all output except warnings")
     return p.parse_args()
 
 
 def main() -> None:
+    global _QUIET
     args       = _parse_args()
+    _QUIET     = args.quiet
     prefix     = Path(args.prefix).expanduser().resolve()
     script_dir = Path(__file__).parent.resolve()
 
@@ -279,15 +292,16 @@ def main() -> None:
     if args.shell_profile:
         _update_shell_profile(prefix)
 
-    env_sh = prefix / "env.sh"
-    print()
-    _banner("Install complete!")
-    print()
-    print(f'  source "{env_sh}"')
-    print()
-    print(f'  Then:  "${args.python_env}" /path/to/script.py')
-    print(f'         "${args.uv_env}" run --project /path/to/app script.py')
-    print()
+    if not _QUIET:
+        env_sh = prefix / "env.sh"
+        print()
+        _banner("Install complete!")
+        print()
+        print(f'  source "{env_sh}"')
+        print()
+        print(f'  Then:  "${args.python_env}" /path/to/script.py')
+        print(f'         "${args.uv_env}" run --project /path/to/app script.py')
+        print()
 
 
 if __name__ == "__main__":

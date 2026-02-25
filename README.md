@@ -17,7 +17,25 @@ Installation is split into two phases:
 
 The shell scripts are intentionally minimal — they exist only because downloading a binary and creating a venv require platform-specific shell syntax. Everything after that runs inside the freshly-created Python venv via `setup.py`, which is pure stdlib and cross-platform.
 
+## Installation
+
+Download the latest release ZIP from GitHub, extract it, and run the installer:
+
+```bash
+# Download and extract
+curl -fsSL https://github.com/redmatter/managed-python/releases/latest/download/managed-python-<VERSION>.zip -o managed-python.zip
+unzip managed-python.zip
+```
+
+```powershell
+# Windows PowerShell
+Invoke-WebRequest https://github.com/redmatter/managed-python/releases/latest/download/managed-python-<VERSION>.zip -OutFile managed-python.zip
+Expand-Archive managed-python.zip
+```
+
 ## Quick Start
+
+**Linux / macOS:**
 
 ```bash
 ./install.sh \
@@ -29,6 +47,32 @@ The shell scripts are intentionally minimal — they exist only because download
 source ~/.claude/redmatter/python/env.sh
 ```
 
+**Windows (PowerShell):**
+
+```powershell
+.\install.ps1 `
+  -Prefix "$env:USERPROFILE\.claude\redmatter\python" `
+  -MinPython "3.10" `
+  -UvEnv "REDMATTER_UV" `
+  -PythonEnv "REDMATTER_PYTHON"
+
+. "$env:USERPROFILE\.claude\redmatter\python\env.ps1"
+```
+
+**Scripted install (quiet mode):**
+
+```bash
+./install.sh \
+  --prefix ~/.claude/redmatter/python \
+  --min-python 3.10 \
+  --uv-env REDMATTER_UV \
+  --python-env REDMATTER_PYTHON \
+  --quiet
+
+source ~/.claude/redmatter/python/env.sh
+"$REDMATTER_PYTHON" /path/to/script.py
+```
+
 ## Options
 
 | Flag | Required | Purpose |
@@ -38,6 +82,7 @@ source ~/.claude/redmatter/python/env.sh
 | `--uv-env NAME` | yes | Env var name for the uv binary path |
 | `--python-env NAME` | yes | Env var name for the python binary path |
 | `--shell-profile` | no | Append `source <prefix>/env.sh` to shell rc |
+| `--quiet` / `-q` | no | Suppress all output except warnings |
 
 ## Usage
 

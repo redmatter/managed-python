@@ -1,5 +1,5 @@
 [distro]
-version = "0.7.1"      # bump on meaningful config changes; major = breaking (requires reinstall)
+version = "0.7.2"      # bump on meaningful config changes; major = breaking (requires reinstall)
 uv_version = "0.10.6"  # pinned uv release
 
 # SHA256 checksums for the pinned uv release archives.

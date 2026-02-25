@@ -10,6 +10,8 @@ shell syntax: bin/ wrappers, env.sh, env.ps1, distro.toml copy, and
 optional shell profile update.
 """
 
+from __future__ import annotations
+
 import argparse
 import os
 import shutil
@@ -79,17 +81,26 @@ def _path_decision(bin_dir: Path) -> tuple[bool, list[str]]:
     """
     def _real_executable(path: str | None) -> str | None:
         """Return path only if it is a non-empty file (filters Windows App Execution Alias stubs)."""
-        if path and Path(path).stat().st_size > 0:
-            return path
+        if not path:
+            return None
+        try:
+            if Path(path).stat().st_size > 0:
+                return path
+        except OSError:
+            return None
         return None
 
     python_found = _real_executable(shutil.which("python")) or _real_executable(shutil.which("python3"))
     uv_found = _real_executable(shutil.which("uv"))
 
     if python_found and uv_found:
+        if _IS_WINDOWS:
+            path_hint = f'To use managed versions: $env:PATH = "{bin_dir};" + $env:PATH'
+        else:
+            path_hint = f'To use managed versions: export PATH="{bin_dir}:$PATH"'
         return False, [
             "python and uv already on PATH — PATH not modified",
-            f'To use managed versions: export PATH="{bin_dir}:$PATH"',
+            path_hint,
         ]
 
     notes: list[str] = []
@@ -130,6 +141,9 @@ def _create_bin(prefix: Path) -> None:
 # ── env.sh ────────────────────────────────────────────────────────────────────
 
 def _write_env_sh(prefix: Path, uv_env: str, python_env: str, distro_version: str) -> None:
+    if _IS_WINDOWS:
+        _info("Skipping env.sh on Windows — use env.ps1 instead")
+        return
     _step("Writing env.sh")
 
     uv_bin  = prefix / "uv"
@@ -211,7 +225,7 @@ def _write_installed_distro_toml(
     source = (script_dir / "distro.toml").read_text(encoding="utf-8").rstrip()
     install_section = (
         f"\n\n[install]\n"
-        f'prefix       = "{prefix}"\n'
+        f'prefix       = "{prefix.as_posix()}"\n'
         f'min_python   = "{min_python}"\n'
         f'uv_env       = "{uv_env}"\n'
         f'python_env   = "{python_env}"\n'
@@ -293,11 +307,13 @@ def main() -> None:
         _update_shell_profile(prefix)
 
     if not _QUIET:
-        env_sh = prefix / "env.sh"
         print()
         _banner("Install complete!")
         print()
-        print(f'  source "{env_sh}"')
+        if _IS_WINDOWS:
+            print(f'  . "{prefix / "env.ps1"}"')
+        else:
+            print(f'  source "{prefix / "env.sh"}"')
         print()
         print(f'  Then:  "${args.python_env}" /path/to/script.py')
         print(f'         "${args.uv_env}" run --project /path/to/app script.py')

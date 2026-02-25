@@ -52,10 +52,18 @@ if ($currentVer -eq $UvVersion) {
     $url  = "https://github.com/astral-sh/uv/releases/download/$UvVersion/uv-${arch}-pc-windows-msvc.zip"
     New-Item -ItemType Directory -Force -Path $Prefix | Out-Null
     $tmp    = [IO.Path]::Combine([IO.Path]::GetTempPath(), [IO.Path]::ChangeExtension([IO.Path]::GetRandomFileName(), ".zip"))
+    $tmpSha = "$tmp.sha256"
     $tmpDir = "$tmp.dir"
     try {
         $ProgressPreference = "SilentlyContinue"
-        Invoke-WebRequest $url -OutFile $tmp -UseBasicParsing
+        Invoke-WebRequest $url           -OutFile $tmp    -UseBasicParsing
+        Invoke-WebRequest "$url.sha256"  -OutFile $tmpSha -UseBasicParsing
+        $expectedHash = (Get-Content $tmpSha).Split()[0].ToUpper()
+        $actualHash   = (Get-FileHash $tmp -Algorithm SHA256).Hash.ToUpper()
+        if ($actualHash -ne $expectedHash) {
+            Write-Error "uv $UvVersion checksum verification failed — download may be corrupt or tampered"
+            exit 1
+        }
         Expand-Archive $tmp $tmpDir -Force
         $uvSrc = Get-ChildItem $tmpDir -Filter "uv.exe" -Recurse | Select-Object -First 1
         Copy-Item $uvSrc.FullName $UvExe -Force
@@ -63,7 +71,7 @@ if ($currentVer -eq $UvVersion) {
         Write-Error "Failed to download uv $UvVersion from $url`: $_"
         exit 1
     } finally {
-        Remove-Item $tmp, $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item $tmp, $tmpSha, $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
     }
     if (-not (Test-Path $UvExe)) {
         Write-Error "Failed to download uv $UvVersion — binary not found after extraction"

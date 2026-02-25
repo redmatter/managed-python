@@ -41,21 +41,43 @@ _bootstrap_uv() {
     local url tmp
     url="$(_uv_download_url "$uv_version")"
     tmp="$(mktemp -d)"
-    trap 'rm -rf "$tmp"' RETURN
+    trap 'rm -rf "$tmp"; trap - RETURN' RETURN
 
     if command -v curl &>/dev/null; then
-        curl -fsSL "$url" -o "${tmp}/uv.tar.gz" \
+        curl -fsSL "$url"          -o "${tmp}/uv.tar.gz"        \
             || { printf "ERROR: Failed to download uv %s\n" "$uv_version" >&2; exit 1; }
+        curl -fsSL "${url}.sha256" -o "${tmp}/uv.tar.gz.sha256" \
+            || { printf "ERROR: Failed to download uv %s checksum\n" "$uv_version" >&2; exit 1; }
     elif command -v wget &>/dev/null; then
-        wget -qO "${tmp}/uv.tar.gz" "$url" \
+        wget -qO "${tmp}/uv.tar.gz"        "$url"          \
             || { printf "ERROR: Failed to download uv %s\n" "$uv_version" >&2; exit 1; }
+        wget -qO "${tmp}/uv.tar.gz.sha256" "${url}.sha256" \
+            || { printf "ERROR: Failed to download uv %s checksum\n" "$uv_version" >&2; exit 1; }
     else
         printf "ERROR: curl or wget required\n" >&2; exit 1
     fi
 
+    local expected_hash actual_hash=""
+    expected_hash="$(awk '{print $1}' "${tmp}/uv.tar.gz.sha256")"
+    if command -v sha256sum &>/dev/null; then
+        actual_hash="$(sha256sum "${tmp}/uv.tar.gz" | awk '{print $1}')"
+    elif command -v shasum &>/dev/null; then
+        actual_hash="$(shasum -a 256 "${tmp}/uv.tar.gz" | awk '{print $1}')"
+    else
+        printf "  ⚠ sha256sum/shasum not found — skipping checksum verification\n" >&2
+    fi
+    if [[ -n "$actual_hash" && "$actual_hash" != "$expected_hash" ]]; then
+        printf "ERROR: uv %s checksum verification failed\n" "$uv_version" >&2; exit 1
+    fi
+
     tar -xzf "${tmp}/uv.tar.gz" -C "$tmp"
     mkdir -p "$prefix"
-    cp "$(find "$tmp" -name "uv" -type f | head -1)" "$uv_bin"
+    local uv_src
+    uv_src="$(find "$tmp" -name "uv" -type f | head -1 || true)"
+    if [[ -z "$uv_src" || ! -f "$uv_src" ]]; then
+        printf "ERROR: failed to locate uv binary in downloaded archive\n" >&2; exit 1
+    fi
+    cp "$uv_src" "$uv_bin"
     chmod +x "$uv_bin"
     _msg "  ✓ uv $uv_version installed"
 }
@@ -85,12 +107,18 @@ main() {
 
     # Extract --prefix, --min-python, and --quiet for bootstrap (all flags forwarded to setup.py)
     local prefix="" min_python="" quiet=""
-    local i
+    local i j
     for (( i=1; i<=$#; i++ )); do
         case "${!i}" in
-            --prefix)     j=$((i+1)); prefix="${!j}";      prefix="${prefix/#\~/$HOME}" ;;
-            --min-python) j=$((i+1)); min_python="${!j}" ;;
-            --quiet|-q)   quiet=1 ;;
+            --prefix)
+                j=$((i+1))
+                if (( j > $# )); then printf "ERROR: --prefix requires a value\n" >&2; exit 1; fi
+                prefix="${!j}"; prefix="${prefix/#\~/$HOME}" ;;
+            --min-python)
+                j=$((i+1))
+                if (( j > $# )); then printf "ERROR: --min-python requires a value\n" >&2; exit 1; fi
+                min_python="${!j}" ;;
+            --quiet|-q) quiet=1 ;;
         esac
     done
 

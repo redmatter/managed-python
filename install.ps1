@@ -51,6 +51,7 @@ if ($currentVer -eq $UvVersion) {
     $tmp    = [IO.Path]::GetTempFileName()
     $tmpDir = "$tmp.dir"
     try {
+        $ProgressPreference = "SilentlyContinue"
         Invoke-WebRequest $url -OutFile $tmp -UseBasicParsing
         Expand-Archive $tmp $tmpDir -Force
         Copy-Item (Get-ChildItem $tmpDir -Filter "uv.exe" -Recurse | Select-Object -First 1).FullName $UvExe -Force
@@ -71,6 +72,10 @@ if (Test-Path $VenvPy) {
     Write-Host "  → Creating Python $MinPython venv"
     & $UvExe venv --python $MinPython (Join-Path $Prefix "venv")
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    if (-not (Test-Path $VenvPy)) {
+        Write-Error "  ✗ venv created but python.exe not found at $VenvPy"
+        exit 1
+    }
     Write-Host "  ✓ venv created"
 }
 

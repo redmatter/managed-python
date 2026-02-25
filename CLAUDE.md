@@ -6,7 +6,7 @@ Bootstrap `uv` and a managed Python runtime to a configurable prefix.
 
 Installation is split into two phases:
 
-```
+```text
 install.sh / install.ps1   →   setup.py   →   configured prefix
   (bootstrap: uv + venv)       (configure: everything else)
 ```

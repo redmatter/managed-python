@@ -32,19 +32,34 @@ def _toml_get(path: Path, key: str) -> str:
 
 # ── Output ────────────────────────────────────────────────────────────────────
 
-def _ok(msg: str)   -> None: print(f"  \u2713 {msg}")
-def _info(msg: str) -> None: print(f"  \u2139 {msg}")
-def _warn(msg: str) -> None: print(f"  \u26a0 {msg}")
-def _step(msg: str) -> None: print(f"\n==> {msg}")
+def _ok(msg: str) -> None:
+    print(f"  \u2713 {msg}")
+
+
+def _info(msg: str) -> None:
+    print(f"  \u2139 {msg}")
+
+
+def _warn(msg: str) -> None:
+    print(f"  \u26a0 {msg}")
+
+
+def _step(msg: str) -> None:
+    print(f"\n==> {msg}")
 
 
 # ── PATH detection ────────────────────────────────────────────────────────────
 
 def _path_decision(bin_dir: Path) -> tuple[bool, list[str]]:
-    """
-    Decide whether to add bin_dir to PATH in generated env files.
+    """Decide whether to add bin_dir to PATH in generated env files.
 
-    Returns (add_to_path, note_lines).
+    Args:
+        bin_dir: The managed-python bin/ directory to conditionally add to PATH.
+
+    Returns:
+        Tuple of (add_to_path, note_lines) where add_to_path is True when the
+        bin directory should be prepended to PATH, and note_lines is a list of
+        human-readable notes explaining the decision.
     """
     python_found = shutil.which("python") or shutil.which("python3")
     uv_found = shutil.which("uv")

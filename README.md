@@ -54,7 +54,7 @@ exec "$PYTHON" script.py
 
 ## Layout After Install
 
-```
+```text
 <prefix>/
   uv                          # uv binary
   bin/

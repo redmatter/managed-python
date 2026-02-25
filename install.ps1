@@ -57,6 +57,10 @@ if ($currentVer -eq $UvVersion) {
     } finally {
         Remove-Item $tmp, $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
     }
+    if (-not (Test-Path $UvExe)) {
+        Write-Error "  ✗ uv download failed — $UvExe not found"
+        exit 1
+    }
     Write-Host "  ✓ uv $UvVersion installed"
 }
 
@@ -66,6 +70,7 @@ if (Test-Path $VenvPy) {
 } else {
     Write-Host "  → Creating Python $MinPython venv"
     & $UvExe venv --python $MinPython (Join-Path $Prefix "venv")
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     Write-Host "  ✓ venv created"
 }
 

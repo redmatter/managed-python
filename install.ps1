@@ -10,15 +10,16 @@
 
 .EXAMPLE
     .\install.ps1 -Prefix "$env:USERPROFILE\.local\redmatter\python" `
-                  -MinPython "3.10" -UvEnv "REDMATTER_UV" -PythonEnv "REDMATTER_PYTHON"
+                  -Python "3.10" -UvEnv "REDMATTER_UV" -PythonEnv "REDMATTER_PYTHON"
 #>
 param(
     [Parameter(Mandatory=$true)]  [string]$Prefix,
-    [Parameter(Mandatory=$true)]  [string]$MinPython,
+    [Parameter(Mandatory=$true)]  [string]$Python,
     [Parameter(Mandatory=$true)]  [string]$UvEnv,
     [Parameter(Mandatory=$true)]  [string]$PythonEnv,
     [switch]$ShellProfile,
-    [switch]$Quiet
+    [switch]$Quiet,
+    [switch]$Isolated
 )
 
 function Write-Msg($msg) { if (-not $Quiet) { Write-Host $msg } }
@@ -88,16 +89,17 @@ if ($currentVer -eq $UvVersion) {
 if (Test-Path $VenvPy) {
     Write-Msg "  ✓ venv already exists"
 } else {
-    Write-Msg "  → Creating Python $MinPython venv"
-    $venvArgs = @("venv", "--python", $MinPython)
+    Write-Msg "  → Creating Python $Python venv"
+    $pythonPref = if ($Isolated) { "only-managed" } else { "system" }
+    $venvArgs = @("venv", "--python", $Python, "--python-preference", $pythonPref)
     if ($Quiet) { $venvArgs += "--quiet" }
     & $UvExe @venvArgs (Join-Path $Prefix "venv")
     if ($LASTEXITCODE -ne 0) {
-        Write-Error "Failed to create Python $MinPython venv — see uv error above"
+        Write-Error "Failed to create Python $Python venv — see uv error above"
         exit $LASTEXITCODE
     }
     if (-not (Test-Path $VenvPy)) {
-        Write-Error "Failed to create Python $MinPython venv — python.exe not found at $VenvPy"
+        Write-Error "Failed to create Python $Python venv — python.exe not found at $VenvPy"
         exit 1
     }
     Write-Msg "  ✓ venv created"
@@ -106,8 +108,9 @@ if (Test-Path $VenvPy) {
 Write-Msg ""
 
 # Hand off to setup.py
-$setupArgs = @("--prefix", $Prefix, "--min-python", $MinPython, "--uv-env", $UvEnv, "--python-env", $PythonEnv)
+$setupArgs = @("--prefix", $Prefix, "--python", $Python, "--uv-env", $UvEnv, "--python-env", $PythonEnv)
 if ($ShellProfile) { $setupArgs += "--shell-profile" }
+if ($Isolated) { $setupArgs += "--isolated" }
 if ($Quiet) { $setupArgs += "--quiet" }
 & $VenvPy (Join-Path $ScriptDir "setup.py") @setupArgs
 exit $LASTEXITCODE

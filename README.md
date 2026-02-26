@@ -40,7 +40,7 @@ Expand-Archive managed-python.zip
 ```bash
 ./install.sh \
   --prefix ~/.local/redmatter/python \
-  --min-python 3.10 \
+  --python 3.10 \
   --uv-env REDMATTER_UV \
   --python-env REDMATTER_PYTHON
 
@@ -52,7 +52,7 @@ source ~/.local/redmatter/python/env.sh
 ```powershell
 .\install.ps1 `
   -Prefix "$env:USERPROFILE\.local\redmatter\python" `
-  -MinPython "3.10" `
+  -Python "3.10" `
   -UvEnv "REDMATTER_UV" `
   -PythonEnv "REDMATTER_PYTHON"
 
@@ -66,14 +66,14 @@ source ~/.local/redmatter/python/env.sh
 > **PowerShell** — evaluate `env.ps1` as a string (bypasses script execution policy):
 >
 > ```powershell
-> install.bat -Prefix "$env:USERPROFILE\.local\redmatter\python" -MinPython "3.10" -UvEnv "REDMATTER_UV" -PythonEnv "REDMATTER_PYTHON"
+> install.bat -Prefix "$env:USERPROFILE\.local\redmatter\python" -Python "3.10" -UvEnv "REDMATTER_UV" -PythonEnv "REDMATTER_PYTHON"
 > Invoke-Expression (Get-Content "$env:USERPROFILE\.local\redmatter\python\env.ps1" -Raw)
 > ```
 >
 > **CMD** — use `call` to load `env.bat` into the current session:
 >
 > ```bat
-> install.bat -Prefix "%USERPROFILE%\.local\redmatter\python" -MinPython "3.10" -UvEnv "REDMATTER_UV" -PythonEnv "REDMATTER_PYTHON"
+> install.bat -Prefix "%USERPROFILE%\.local\redmatter\python" -Python "3.10" -UvEnv "REDMATTER_UV" -PythonEnv "REDMATTER_PYTHON"
 > call "%USERPROFILE%\.local\redmatter\python\env.bat"
 > ```
 >
@@ -85,7 +85,7 @@ source ~/.local/redmatter/python/env.sh
 ```bash
 ./install.sh \
   --prefix ~/.local/redmatter/python \
-  --min-python 3.10 \
+  --python 3.10 \
   --uv-env REDMATTER_UV \
   --python-env REDMATTER_PYTHON \
   --quiet
@@ -99,11 +99,15 @@ source ~/.local/redmatter/python/env.sh
 | Flag | Required | Purpose |
 |------|----------|---------|
 | `--prefix PATH` | yes | Install location |
-| `--min-python X.Y` | yes | Minimum Python version for venv |
+| `--python X.Y` | yes | Python version for venv. Default mode: prefer matching system Python, fall back to uv-managed. Isolated mode: always uv-managed. |
 | `--uv-env NAME` | yes | Env var name for the uv binary path |
 | `--python-env NAME` | yes | Env var name for the python binary path |
+| `--isolated` | no | Force uv-managed Python (ignores system Python); always adds `bin/` to PATH |
 | `--shell-profile` | no | Append `source <prefix>/env.sh` to shell rc |
 | `--quiet` / `-q` | no | Suppress all output except warnings |
+
+> [!NOTE]
+> **Choosing a mode:** Use the default on developer machines where a system Python already exists. Use `--isolated` in CI, containers, or shared servers where you need a fully reproducible environment independent of whatever Python is (or isn't) installed on the host.
 
 ## Usage
 
@@ -152,10 +156,11 @@ uv_version = "0.10.6"
 
 [install]
 prefix       = "/home/user/.local/redmatter/python"
-min_python   = "3.10"
+python       = "3.10"
 uv_env       = "REDMATTER_UV"
 python_env   = "REDMATTER_PYTHON"
 shell_profile = false
+isolated      = false
 ```
 
 ## Idempotency

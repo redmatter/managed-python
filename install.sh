@@ -2,7 +2,7 @@
 # install.sh — Bootstrap uv + Python venv, then hand off to setup.py
 #
 # Usage:
-#   ./install.sh --prefix PATH --min-python X.Y --uv-env NAME --python-env NAME [--shell-profile]
+#   ./install.sh --prefix PATH --python X.Y --uv-env NAME --python-env NAME [--isolated] [--shell-profile]
 #
 # Bootstrap phase (this script): download uv, create venv.
 # Configuration phase (setup.py): env.sh, env.ps1, bin/ wrappers, shell profile.
@@ -92,14 +92,16 @@ _bootstrap_uv() {
 }
 
 _bootstrap_venv() {
-    local prefix="$1" min_python="$2"
+    local prefix="$1" min_python="$2" isolated="${3:-}"
 
     if [[ -x "${prefix}/venv/bin/python" ]]; then
         _msg "  ✓ venv already exists"; return
     fi
 
     _msg "  → Creating Python $min_python venv"
-    "${prefix}/uv" venv --python "$min_python" ${quiet:+--quiet} "${prefix}/venv" \
+    local pref_args="--python-preference system"
+    [[ "$isolated" == "1" ]] && pref_args="--python-preference only-managed"
+    "${prefix}/uv" venv --python "$min_python" $pref_args ${quiet:+--quiet} "${prefix}/venv" \
         || { printf "ERROR: Failed to create Python %s venv — see uv error above\n" "$min_python" >&2; exit 1; }
     _msg "  ✓ venv created"
 }
@@ -114,8 +116,8 @@ main() {
     uv_version="$(grep '^uv_version' "${script_dir}/distro.toml" \
         | sed -E 's/^[^=]+=\s*"?([^"#]+)"?.*/\1/' | tr -d '[:space:]')"
 
-    # Extract --prefix, --min-python, and --quiet for bootstrap (all flags forwarded to setup.py)
-    local prefix="" min_python="" quiet=""
+    # Extract --prefix, --python, --isolated, and --quiet for bootstrap (all flags forwarded to setup.py)
+    local prefix="" min_python="" isolated="" quiet=""
     local i j
     for (( i=1; i<=$#; i++ )); do
         case "${!i}" in
@@ -123,16 +125,17 @@ main() {
                 j=$((i+1))
                 if (( j > $# )); then printf "ERROR: --prefix requires a value\n" >&2; exit 1; fi
                 prefix="${!j}"; prefix="${prefix/#\~/$HOME}" ;;
-            --min-python)
+            --python)
                 j=$((i+1))
-                if (( j > $# )); then printf "ERROR: --min-python requires a value\n" >&2; exit 1; fi
+                if (( j > $# )); then printf "ERROR: --python requires a value\n" >&2; exit 1; fi
                 min_python="${!j}" ;;
+            --isolated) isolated=1 ;;
             --quiet|-q) quiet=1 ;;
         esac
     done
 
     [[ -z "$prefix" ]]     && { printf "ERROR: --prefix is required\n" >&2; exit 1; }
-    [[ -z "$min_python" ]] && { printf "ERROR: --min-python is required\n" >&2; exit 1; }
+    [[ -z "$min_python" ]] && { printf "ERROR: --python is required\n" >&2; exit 1; }
 
     _msg ""
     _msg "managed-python bootstrap"
@@ -140,7 +143,7 @@ main() {
     _msg ""
 
     _bootstrap_uv   "$prefix" "$uv_version" "${script_dir}/distro.toml"
-    _bootstrap_venv "$prefix" "$min_python"
+    _bootstrap_venv "$prefix" "$min_python" "$isolated"
 
     _msg ""
     exec "${prefix}/venv/bin/python" "${script_dir}/setup.py" "$@"

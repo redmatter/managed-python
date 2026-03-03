@@ -31,7 +31,7 @@ _uv_download_url() {
 _uv_expected_hash() {
     local distro_toml="$1" target="$2"
     grep "^${target}" "$distro_toml" \
-        | sed -E 's/^[^=]+=\s*"([^"]+)".*/\1/'
+        | sed -E 's/^[^=]+=[[:space:]]*"([^"]+)".*/\1/'
 }
 
 _bootstrap_uv() {
@@ -114,7 +114,7 @@ main() {
 
     local uv_version
     uv_version="$(grep '^uv_version' "${script_dir}/distro.toml" \
-        | sed -E 's/^[^=]+=\s*"?([^"#]+)"?.*/\1/' | tr -d '[:space:]')"
+        | sed -E 's/^[^=]+=[[:space:]]*"?([^"#]+)"?.*/\1/' | tr -d '[:space:]')"
 
     # Extract --prefix, --python, --isolated, and --quiet for bootstrap (all flags forwarded to setup.py)
     local prefix="" min_python="" isolated="" quiet=""

@@ -202,8 +202,10 @@ def _write_env_ps1(prefix: Path, uv_env: str, python_env: str, distro_version: s
         "# Env vars (always set -- these are the reliable contract)",
         f'$env:{uv_env} = "{uv_exe}"',
         f'$env:{python_env} = "{venv_py}"',
-        "",
     ]
+    if _IS_WINDOWS:
+        lines.append('$env:PYTHONUTF8 = "1"')
+    lines.append("")
 
     if add_to_path:
         lines += [f"# {n}" for n in notes]
@@ -240,6 +242,7 @@ def _write_env_bat(prefix: Path, uv_env: str, python_env: str, distro_version: s
         ":: Env vars (always set -- these are the reliable contract)",
         f'SET {uv_env}={uv_exe}',
         f'SET {python_env}={venv_py}',
+        'SET PYTHONUTF8=1',
         "",
     ]
 

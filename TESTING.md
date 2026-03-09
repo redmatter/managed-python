@@ -16,18 +16,18 @@ rm -rf /tmp/mp-test
 
 ```bash
 ./install.sh --prefix /tmp/mp-test --python 3.10 \
-  --uv-env TEST_UV --python-env TEST_PYTHON
+  --uv-env TEST_UV --uvx-env TEST_UVX --python-env TEST_PYTHON
 ```
 
 **Expect:**
 
 - uv downloaded (or skipped if already current)
 - venv created using system Python if a matching version exists, otherwise uv-managed
-- `distro.toml` contains `isolated = false`
-- `env.sh` contains `export PATH=...` (system python found → shadow warning; no system python → silently added)
+- `distro.toml` contains `isolated = false` and `uvx_env = "TEST_UVX"`
+- `env.sh` contains `export TEST_UVX=...` and `export PATH=...` (system python found → shadow warning; no system python → silently added)
 
 ```bash
-grep -A7 '^\[install\]' /tmp/mp-test/distro.toml
+grep -A8 '^\[install\]' /tmp/mp-test/distro.toml
 cat /tmp/mp-test/env.sh
 ```
 
@@ -36,7 +36,7 @@ cat /tmp/mp-test/env.sh
 ```bash
 rm -rf /tmp/mp-test
 ./install.sh --prefix /tmp/mp-test --python 3.10 \
-  --uv-env TEST_UV --python-env TEST_PYTHON --isolated
+  --uv-env TEST_UV --uvx-env TEST_UVX --python-env TEST_PYTHON --isolated
 ```
 
 **Expect:**
@@ -47,7 +47,7 @@ rm -rf /tmp/mp-test
 - `venv/bin/python` is a uv-managed build (not `/usr/bin/python*`)
 
 ```bash
-grep -A7 '^\[install\]' /tmp/mp-test/distro.toml
+grep -A8 '^\[install\]' /tmp/mp-test/distro.toml
 cat /tmp/mp-test/env.sh
 /tmp/mp-test/venv/bin/python --version
 ```
@@ -56,7 +56,7 @@ cat /tmp/mp-test/env.sh
 
 ```bash
 ./install.sh --prefix /tmp/mp-test --python 3.10 \
-  --uv-env TEST_UV --python-env TEST_PYTHON --isolated
+  --uv-env TEST_UV --uvx-env TEST_UVX --python-env TEST_PYTHON --isolated
 ```
 
 **Expect:**
@@ -69,7 +69,7 @@ cat /tmp/mp-test/env.sh
 
 ```bash
 ./install.sh --prefix /tmp/mp-test --min-python 3.10 \
-  --uv-env TEST_UV --python-env TEST_PYTHON
+  --uv-env TEST_UV --uvx-env TEST_UVX --python-env TEST_PYTHON
 ```
 
 **Expect:** exits with `ERROR: --python is required`
@@ -90,19 +90,19 @@ Remove-Item -Recurse -Force C:\Users\Quickemu\temp\mp-test -ErrorAction Silently
 
 ```powershell
 .\install.ps1 -Prefix "C:\Users\Quickemu\temp\mp-test" -Python "3.10" `
-  -UvEnv "TEST_UV" -PythonEnv "TEST_PYTHON"
+  -UvEnv "TEST_UV" -UvxEnv "TEST_UVX" -PythonEnv "TEST_PYTHON"
 Get-Content C:\Users\Quickemu\temp\mp-test\distro.toml
 Get-Content C:\Users\Quickemu\temp\mp-test\env.ps1
 ```
 
-**Expect:** `isolated = false` in distro.toml; PATH added only if no system python/uv found.
+**Expect:** `isolated = false` and `uvx_env = "TEST_UVX"` in distro.toml; PATH added only if no system python/uv found.
 
 ### Test 2 — Isolated
 
 ```powershell
 Remove-Item -Recurse -Force C:\Users\Quickemu\temp\mp-test
 .\install.ps1 -Prefix "C:\Users\Quickemu\temp\mp-test" -Python "3.10" `
-  -UvEnv "TEST_UV" -PythonEnv "TEST_PYTHON" -Isolated
+  -UvEnv "TEST_UV" -UvxEnv "TEST_UVX" -PythonEnv "TEST_PYTHON" -Isolated
 Get-Content C:\Users\Quickemu\temp\mp-test\distro.toml
 Get-Content C:\Users\Quickemu\temp\mp-test\env.ps1
 & "C:\Users\Quickemu\temp\mp-test\venv\Scripts\python.exe" --version
@@ -114,7 +114,7 @@ Get-Content C:\Users\Quickemu\temp\mp-test\env.ps1
 
 ```powershell
 .\install.ps1 -Prefix "C:\Users\Quickemu\temp\mp-test" -Python "3.10" `
-  -UvEnv "TEST_UV" -PythonEnv "TEST_PYTHON" -Isolated
+  -UvEnv "TEST_UV" -UvxEnv "TEST_UVX" -PythonEnv "TEST_PYTHON" -Isolated
 ```
 
 **Expect:** uv and venv skipped; env files regenerated.
@@ -123,7 +123,7 @@ Get-Content C:\Users\Quickemu\temp\mp-test\env.ps1
 
 ```powershell
 .\install.ps1 -Prefix "C:\Users\Quickemu\temp\mp-test" -MinPython "3.10" `
-  -UvEnv "TEST_UV" -PythonEnv "TEST_PYTHON"
+  -UvEnv "TEST_UV" -UvxEnv "TEST_UVX" -PythonEnv "TEST_PYTHON"
 ```
 
 **Expect:** PowerShell parameter binding error — `-MinPython` is not a recognised parameter.

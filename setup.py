@@ -126,27 +126,33 @@ def _create_bin(prefix: Path) -> None:
 
     if _IS_WINDOWS:
         uv_exe  = prefix / "uv.exe"
+        uvx_exe = prefix / "uvx.exe"
         venv_py = prefix / "venv" / "Scripts" / "python.exe"
         (bin_dir / "python.cmd").write_text(f'@"{venv_py}" %*\n', encoding="utf-8")
         (bin_dir / "uv.cmd").write_text(f'@"{uv_exe}" %*\n', encoding="utf-8")
+        (bin_dir / "uvx.cmd").write_text(f'@"{uvx_exe}" %*\n', encoding="utf-8")
         _ok("bin\\python.cmd")
         _ok("bin\\uv.cmd")
+        _ok("bin\\uvx.cmd")
     else:
         _symlink(bin_dir / "python", Path("../venv/bin/python"))
         _symlink(bin_dir / "uv",     Path("../uv"))
+        _symlink(bin_dir / "uvx",    Path("../uvx"))
         _ok("bin/python \u2192 ../venv/bin/python")
         _ok("bin/uv \u2192 ../uv")
+        _ok("bin/uvx \u2192 ../uvx")
 
 
 # ── env.sh ────────────────────────────────────────────────────────────────────
 
-def _write_env_sh(prefix: Path, uv_env: str, python_env: str, distro_version: str, *, isolated: bool = False) -> None:
+def _write_env_sh(prefix: Path, uv_env: str, uvx_env: str, python_env: str, distro_version: str, *, isolated: bool = False) -> None:
     if _IS_WINDOWS:
         _info("Skipping env.sh on Windows — use env.ps1 instead")
         return
     _step("Writing env.sh")
 
     uv_bin  = prefix / "uv"
+    uvx_bin = prefix / "uvx"
     venv_py = prefix / "venv" / "bin" / "python"
     bin_dir = prefix / "bin"
 
@@ -162,6 +168,7 @@ def _write_env_sh(prefix: Path, uv_env: str, python_env: str, distro_version: st
         "",
         "# Env vars (always set \u2014 these are the reliable contract)",
         f'export {uv_env}="{uv_bin}"',
+        f'export {uvx_env}="{uvx_bin}"',
         f'export {python_env}="{venv_py}"',
         "",
     ]
@@ -180,10 +187,11 @@ def _write_env_sh(prefix: Path, uv_env: str, python_env: str, distro_version: st
 
 # ── env.ps1 ───────────────────────────────────────────────────────────────────
 
-def _write_env_ps1(prefix: Path, uv_env: str, python_env: str, distro_version: str, *, isolated: bool = False) -> None:
+def _write_env_ps1(prefix: Path, uv_env: str, uvx_env: str, python_env: str, distro_version: str, *, isolated: bool = False) -> None:
     _step("Writing env.ps1")
 
     uv_exe  = prefix / ("uv.exe" if _IS_WINDOWS else "uv")
+    uvx_exe = prefix / ("uvx.exe" if _IS_WINDOWS else "uvx")
     venv_py = prefix / "venv" / ("Scripts" if _IS_WINDOWS else "bin") / (
         "python.exe" if _IS_WINDOWS else "python"
     )
@@ -201,6 +209,7 @@ def _write_env_ps1(prefix: Path, uv_env: str, python_env: str, distro_version: s
         "",
         "# Env vars (always set -- these are the reliable contract)",
         f'$env:{uv_env} = "{uv_exe}"',
+        f'$env:{uvx_env} = "{uvx_exe}"',
         f'$env:{python_env} = "{venv_py}"',
     ]
     if _IS_WINDOWS:
@@ -220,11 +229,12 @@ def _write_env_ps1(prefix: Path, uv_env: str, python_env: str, distro_version: s
 
 # ── env.bat ───────────────────────────────────────────────────────────────────
 
-def _write_env_bat(prefix: Path, uv_env: str, python_env: str, distro_version: str, *, isolated: bool = False) -> None:
+def _write_env_bat(prefix: Path, uv_env: str, uvx_env: str, python_env: str, distro_version: str, *, isolated: bool = False) -> None:
     if not _IS_WINDOWS:
         return
 
     uv_exe  = prefix / "uv.exe"
+    uvx_exe = prefix / "uvx.exe"
     venv_py = prefix / "venv" / "Scripts" / "python.exe"
     bin_dir = prefix / "bin"
 
@@ -241,6 +251,7 @@ def _write_env_bat(prefix: Path, uv_env: str, python_env: str, distro_version: s
         "",
         ":: Env vars (always set -- these are the reliable contract)",
         f'SET {uv_env}={uv_exe}',
+        f'SET {uvx_env}={uvx_exe}',
         f'SET {python_env}={venv_py}',
         'SET PYTHONUTF8=1',
         "",
@@ -263,6 +274,7 @@ def _write_installed_distro_toml(
     prefix: Path,
     min_python: str,
     uv_env: str,
+    uvx_env: str,
     python_env: str,
     shell_profile: bool,
     isolated: bool = False,
@@ -277,6 +289,7 @@ def _write_installed_distro_toml(
         f'prefix       = "{prefix.as_posix()}"\n'
         f'python       = "{min_python}"\n'
         f'uv_env       = "{uv_env}"\n'
+        f'uvx_env      = "{uvx_env}"\n'
         f'python_env   = "{python_env}"\n'
         f"shell_profile = {'true' if shell_profile else 'false'}\n"
         f"isolated      = {'true' if isolated else 'false'}\n"
@@ -330,6 +343,7 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--prefix",       required=True,                help="Install prefix")
     p.add_argument("--python",       required=True, dest="python_version")
     p.add_argument("--uv-env",       required=True, dest="uv_env",     help="Env var name for uv path")
+    p.add_argument("--uvx-env",      required=True, dest="uvx_env",    help="Env var name for uvx path")
     p.add_argument("--python-env",   required=True, dest="python_env", help="Env var name for python path")
     p.add_argument("--shell-profile", action="store_true", dest="shell_profile")
     p.add_argument("--isolated",     action="store_true", dest="isolated")
@@ -348,11 +362,11 @@ def main() -> None:
     distro_version = _toml_get(script_dir / "distro.toml", "version")
 
     _create_bin(prefix)
-    _write_env_sh(prefix, args.uv_env, args.python_env, distro_version, isolated=args.isolated)
-    _write_env_ps1(prefix, args.uv_env, args.python_env, distro_version, isolated=args.isolated)
-    _write_env_bat(prefix, args.uv_env, args.python_env, distro_version, isolated=args.isolated)
+    _write_env_sh(prefix, args.uv_env, args.uvx_env, args.python_env, distro_version, isolated=args.isolated)
+    _write_env_ps1(prefix, args.uv_env, args.uvx_env, args.python_env, distro_version, isolated=args.isolated)
+    _write_env_bat(prefix, args.uv_env, args.uvx_env, args.python_env, distro_version, isolated=args.isolated)
     _write_installed_distro_toml(
-        script_dir, prefix, args.python_version, args.uv_env, args.python_env, args.shell_profile,
+        script_dir, prefix, args.python_version, args.uv_env, args.uvx_env, args.python_env, args.shell_profile,
         isolated=args.isolated,
     )
 
@@ -374,9 +388,11 @@ def main() -> None:
         if _IS_WINDOWS:
             print(f'  Then:  $env:{args.python_env} /path/to/script.py')
             print(f'         $env:{args.uv_env} run --project /path/to/app script.py')
+            print(f'         $env:{args.uvx_env} ruff --version')
         else:
             print(f'  Then:  "${args.python_env}" /path/to/script.py')
             print(f'         "${args.uv_env}" run --project /path/to/app script.py')
+            print(f'         "${args.uvx_env}" ruff --version')
         print()
 
 

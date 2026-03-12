@@ -365,14 +365,29 @@ def _parse_args() -> argparse.Namespace:
     )
     p.add_argument("--prefix",       required=True,                help="Install prefix")
     p.add_argument("--python",       required=True, dest="python_version")
-    p.add_argument("--uv-env",       required=True, dest="uv_env",     help="Env var name for uv path")
-    p.add_argument("--uvx-env",      required=True, dest="uvx_env",    help="Env var name for uvx path")
-    p.add_argument("--python-env",   required=True, dest="python_env", help="Env var name for python path")
+    p.add_argument("--env-prefix",   dest="env_prefix",           help="Common prefix for env var names (e.g. REDMATTER → REDMATTER_UV, REDMATTER_UVX, REDMATTER_PYTHON)")
+    p.add_argument("--uv-env",       dest="uv_env",               help="Env var name for uv path")
+    p.add_argument("--uvx-env",      dest="uvx_env",              help="Env var name for uvx path")
+    p.add_argument("--python-env",   dest="python_env",           help="Env var name for python path")
     p.add_argument("--shell-profile", action="store_true", dest="shell_profile")
     p.add_argument("--isolated",     action="store_true", dest="isolated")
     p.add_argument("--quiet", "-q", action="store_true", dest="quiet",
                    help="Suppress all output except warnings")
-    return p.parse_args()
+    args = p.parse_args()
+
+    individual = [args.uv_env, args.uvx_env, args.python_env]
+    if args.env_prefix:
+        if any(individual):
+            p.error("--env-prefix cannot be combined with --uv-env, --uvx-env, or --python-env")
+        args.uv_env     = f"{args.env_prefix}_UV"
+        args.uvx_env    = f"{args.env_prefix}_UVX"
+        args.python_env = f"{args.env_prefix}_PYTHON"
+    else:
+        missing = [flag for flag, val in (("--uv-env", args.uv_env), ("--uvx-env", args.uvx_env), ("--python-env", args.python_env)) if not val]
+        if missing:
+            p.error(f"the following arguments are required: {', '.join(missing)} (or use --env-prefix)")
+
+    return args
 
 
 def main() -> None:

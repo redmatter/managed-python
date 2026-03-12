@@ -9,18 +9,39 @@
     handled by setup.py.
 
 .EXAMPLE
+    .\install.ps1 -Prefix "$env:USERPROFILE\.local\redmatter\python" -Python "3.10" -EnvPrefix "REDMATTER"
+
+.EXAMPLE
     .\install.ps1 -Prefix "$env:USERPROFILE\.local\redmatter\python" `
-                  -Python "3.10" -UvEnv "REDMATTER_UV" -PythonEnv "REDMATTER_PYTHON"
+                  -Python "3.10" -UvEnv "REDMATTER_UV" -UvxEnv "REDMATTER_UVX" -PythonEnv "REDMATTER_PYTHON"
 #>
 param(
     [Parameter(Mandatory=$true)]  [string]$Prefix,
     [Parameter(Mandatory=$true)]  [string]$Python,
-    [Parameter(Mandatory=$true)]  [string]$UvEnv,
-    [Parameter(Mandatory=$true)]  [string]$PythonEnv,
+    [Parameter(Mandatory=$false)] [string]$EnvPrefix,
+    [Parameter(Mandatory=$false)] [string]$UvEnv,
+    [Parameter(Mandatory=$false)] [string]$UvxEnv,
+    [Parameter(Mandatory=$false)] [string]$PythonEnv,
     [switch]$ShellProfile,
     [switch]$Quiet,
     [switch]$Isolated
 )
+
+if ($EnvPrefix) {
+    if ($UvEnv -or $UvxEnv -or $PythonEnv) {
+        Write-Error "-EnvPrefix cannot be combined with -UvEnv, -UvxEnv, or -PythonEnv"
+        exit 1
+    }
+} else {
+    $missing = @()
+    if (-not $UvEnv)     { $missing += "-UvEnv" }
+    if (-not $UvxEnv)    { $missing += "-UvxEnv" }
+    if (-not $PythonEnv) { $missing += "-PythonEnv" }
+    if ($missing.Count -gt 0) {
+        Write-Error "The following parameters are required: $($missing -join ', ') (or use -EnvPrefix)"
+        exit 1
+    }
+}
 
 function Write-Msg($msg) { if (-not $Quiet) { Write-Host $msg } }
 
@@ -72,6 +93,8 @@ if ($currentVer -eq $UvVersion) {
         Expand-Archive $tmp $tmpDir -Force
         $uvSrc = Get-ChildItem $tmpDir -Filter "uv.exe" -Recurse | Select-Object -First 1
         Copy-Item $uvSrc.FullName $UvExe -Force
+        $uvxSrc = Get-ChildItem $tmpDir -Filter "uvx.exe" -Recurse | Select-Object -First 1
+        Copy-Item $uvxSrc.FullName (Join-Path $Prefix "uvx.exe") -Force
     } catch {
         Write-Error "Failed to download uv $UvVersion from $url`: $_"
         exit 1
@@ -108,7 +131,11 @@ if (Test-Path $VenvPy) {
 Write-Msg ""
 
 # Hand off to setup.py
-$setupArgs = @("--prefix", $Prefix, "--python", $Python, "--uv-env", $UvEnv, "--python-env", $PythonEnv)
+if ($EnvPrefix) {
+    $setupArgs = @("--prefix", $Prefix, "--python", $Python, "--env-prefix", $EnvPrefix)
+} else {
+    $setupArgs = @("--prefix", $Prefix, "--python", $Python, "--uv-env", $UvEnv, "--uvx-env", $UvxEnv, "--python-env", $PythonEnv)
+}
 if ($ShellProfile) { $setupArgs += "--shell-profile" }
 if ($Isolated) { $setupArgs += "--isolated" }
 if ($Quiet) { $setupArgs += "--quiet" }

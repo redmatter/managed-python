@@ -42,6 +42,7 @@ Expand-Archive managed-python.zip
   --prefix ~/.local/redmatter/python \
   --python 3.10 \
   --uv-env REDMATTER_UV \
+  --uvx-env REDMATTER_UVX \
   --python-env REDMATTER_PYTHON
 
 source ~/.local/redmatter/python/env.sh
@@ -54,6 +55,7 @@ source ~/.local/redmatter/python/env.sh
   -Prefix "$env:USERPROFILE\.local\redmatter\python" `
   -Python "3.10" `
   -UvEnv "REDMATTER_UV" `
+  -UvxEnv "REDMATTER_UVX" `
   -PythonEnv "REDMATTER_PYTHON"
 
 . "$env:USERPROFILE\.local\redmatter\python\env.ps1"
@@ -66,14 +68,14 @@ source ~/.local/redmatter/python/env.sh
 > **PowerShell** — evaluate `env.ps1` as a string (bypasses script execution policy):
 >
 > ```powershell
-> install.bat -Prefix "$env:USERPROFILE\.local\redmatter\python" -Python "3.10" -UvEnv "REDMATTER_UV" -PythonEnv "REDMATTER_PYTHON"
+> install.bat -Prefix "$env:USERPROFILE\.local\redmatter\python" -Python "3.10" -UvEnv "REDMATTER_UV" -UvxEnv "REDMATTER_UVX" -PythonEnv "REDMATTER_PYTHON"
 > Invoke-Expression (Get-Content "$env:USERPROFILE\.local\redmatter\python\env.ps1" -Raw)
 > ```
 >
 > **CMD** — use `call` to load `env.bat` into the current session:
 >
 > ```bat
-> install.bat -Prefix "%USERPROFILE%\.local\redmatter\python" -Python "3.10" -UvEnv "REDMATTER_UV" -PythonEnv "REDMATTER_PYTHON"
+> install.bat -Prefix "%USERPROFILE%\.local\redmatter\python" -Python "3.10" -UvEnv "REDMATTER_UV" -UvxEnv "REDMATTER_UVX" -PythonEnv "REDMATTER_PYTHON"
 > call "%USERPROFILE%\.local\redmatter\python\env.bat"
 > ```
 >
@@ -87,6 +89,7 @@ source ~/.local/redmatter/python/env.sh
   --prefix ~/.local/redmatter/python \
   --python 3.10 \
   --uv-env REDMATTER_UV \
+  --uvx-env REDMATTER_UVX \
   --python-env REDMATTER_PYTHON \
   --quiet
 
@@ -101,6 +104,7 @@ source ~/.local/redmatter/python/env.sh
 | `--prefix PATH` | yes | Install location |
 | `--python X.Y` | yes | Python version for venv. Default mode: prefer matching system Python, fall back to uv-managed. Isolated mode: always uv-managed. |
 | `--uv-env NAME` | yes | Env var name for the uv binary path |
+| `--uvx-env NAME` | yes | Env var name for the uvx binary path |
 | `--python-env NAME` | yes | Env var name for the python binary path |
 | `--isolated` | no | Force uv-managed Python (ignores system Python); always adds `bin/` to PATH |
 | `--shell-profile` | no | Append `source <prefix>/env.sh` to shell rc |
@@ -118,6 +122,9 @@ source ~/.local/redmatter/python/env.sh
 # Run a script with dependencies (pyproject.toml in app dir)
 "$REDMATTER_UV" run --project /path/to/app my-script.py
 
+# Run a tool without installing it
+"$REDMATTER_UVX" ruff --version
+
 # Install a package into the shared venv (use sparingly)
 "$REDMATTER_UV" pip install --python "$REDMATTER_PYTHON" some-package
 
@@ -131,11 +138,14 @@ exec "$PYTHON" script.py
 ```text
 <prefix>/
   uv                          # uv binary
+  uvx                         # uvx binary
   bin/
     python -> ../venv/bin/python   # symlink (Linux/macOS)
     uv -> ../uv                    # symlink (Linux/macOS)
+    uvx -> ../uvx                  # symlink (Linux/macOS)
     python.cmd                     # wrapper (Windows)
     uv.cmd                         # wrapper (Windows)
+    uvx.cmd                        # wrapper (Windows)
   venv/
     bin/python                # Linux/macOS
     Scripts/python.exe        # Windows
@@ -158,6 +168,7 @@ uv_version = "0.10.6"
 prefix       = "/home/user/.local/redmatter/python"
 python       = "3.10"
 uv_env       = "REDMATTER_UV"
+uvx_env      = "REDMATTER_UVX"
 python_env   = "REDMATTER_PYTHON"
 shell_profile = false
 isolated      = false

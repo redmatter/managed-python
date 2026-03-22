@@ -88,6 +88,13 @@ _bootstrap_uv() {
     fi
     cp "$uv_src" "$uv_bin"
     chmod +x "$uv_bin"
+    local uvx_src
+    uvx_src="$(find "$tmp" -name "uvx" -type f | head -1 || true)"
+    if [[ -z "$uvx_src" || ! -f "$uvx_src" ]]; then
+        printf "ERROR: failed to locate uvx binary in downloaded archive\n" >&2; exit 1
+    fi
+    cp "$uvx_src" "${prefix}/uvx"
+    chmod +x "${prefix}/uvx"
     _msg "  ✓ uv $uv_version installed"
 }
 
@@ -146,6 +153,8 @@ main() {
     _bootstrap_venv "$prefix" "$min_python" "$isolated"
 
     _msg ""
+    # All flags (including --env-prefix / --uv-env / --uvx-env / --python-env) are forwarded
+    # verbatim to setup.py, which owns env var name resolution and validation.
     exec "${prefix}/venv/bin/python" "${script_dir}/setup.py" "$@"
 }
 

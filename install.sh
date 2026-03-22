@@ -153,6 +153,8 @@ main() {
     _bootstrap_venv "$prefix" "$min_python" "$isolated"
 
     _msg ""
+    # All flags (including --env-prefix / --uv-env / --uvx-env / --python-env) are forwarded
+    # verbatim to setup.py, which owns env var name resolution and validation.
     exec "${prefix}/venv/bin/python" "${script_dir}/setup.py" "$@"
 }
 

@@ -94,6 +94,7 @@ if ($currentVer -eq $UvVersion) {
         $uvSrc = Get-ChildItem $tmpDir -Filter "uv.exe" -Recurse | Select-Object -First 1
         Copy-Item $uvSrc.FullName $UvExe -Force
         $uvxSrc = Get-ChildItem $tmpDir -Filter "uvx.exe" -Recurse | Select-Object -First 1
+        if (-not $uvxSrc) { Write-Error "Failed to locate uvx.exe in archive"; exit 1 }
         Copy-Item $uvxSrc.FullName (Join-Path $Prefix "uvx.exe") -Force
     } catch {
         Write-Error "Failed to download uv $UvVersion from $url`: $_"

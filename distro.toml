@@ -1,13 +1,14 @@
 [distro]
-version = "0.10.0"      # bump on meaningful config changes; major = breaking (requires reinstall)
-uv_version = "0.10.6"  # pinned uv release
+version = "0.10.1"      # bump on meaningful config changes; major = breaking (requires reinstall)
+uv_version = "0.10.12"  # pinned uv release
 
 # SHA256 checksums for the pinned uv release archives.
 # Update these whenever uv_version changes (run: release.py --uv-version X.Y.Z).
 [uv_checksums]
-x86_64-unknown-linux-gnu   = "aaa402e19d14a6b9a4267fcf4ec35380f804c68923525cea67cd6ee05bb4e930"
-aarch64-unknown-linux-gnu  = "9380705294a85e3e634570abddd5b2577900c1873c29b790c7abc56a81dce4bc"
-x86_64-apple-darwin        = "d7647571fb17a5107d4d23cc190418039c157fd7361ddb59bc6f8127a49e3eac"
-aarch64-apple-darwin       = "3993249d8f51deaf34cfce037e57e294e82267ff1f9dc45b7983a17afaf065b4"
-x86_64-pc-windows-msvc     = "b27eb789f281e398a82197477de727fc8faf08605152115686da2c3cba0d25f7"
-aarch64-pc-windows-msvc    = "e431c9a4f8d66e872f6640500cbbf1af20418720b78ac01404399ac810ef2e46"
+x86_64-unknown-linux-gnu          = "ec72570c9d1f33021aa80b176d7baba390de2cfeb1abcbefca346d563bf17484"
+aarch64-unknown-linux-gnu         = "0ed7d20f49f6b9b60d45fdfcac28f3ac01a671a6ef08672401ed2833423fea2a"
+x86_64-apple-darwin               = "17443e293f2ae407bb2d8d34b875ebfe0ae01cf1296de5647e69e7b2e2b428f0"
+aarch64-apple-darwin              = "ae738b5661a900579ec621d3918c0ef17bdec0da2a8a6d8b161137cd15f25414"
+x86_64-pc-windows-msvc            = "4c1d55501869b3330d4aabf45ad6024ce2367e0f3af83344395702d272c22e88"
+aarch64-pc-windows-msvc           = "e79881e2c4f98a0f3a37b8770bf224e8fee70f6dcf8fc17055d8291bb1b0b867"
+

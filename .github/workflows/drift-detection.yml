@@ -1,0 +1,13 @@
+name: Architecture Drift Detection
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, synchronize]
+    branches:
+      - develop
+
+jobs:
+  drift-detection:
+    uses: redmatter/github-workflows/.github/workflows/drift-detection.yml@v1
+    secrets:
+      GH_SSH_KEY: ${{ secrets.GH_SSH_KEY }}

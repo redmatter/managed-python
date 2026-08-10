@@ -143,12 +143,12 @@ The cooldown is a default, not a cage. A command-line flag beats the env var:
 | ------ | ---------- |
 | `uv pip install`, `uv add`, `uv lock`, `uv sync` resolution | Yes |
 | `uvx` / `uv tool install` resolution | Yes |
-| Existing `uv.lock` installs | No - the lockfile's own recorded timestamp is used until you pass `--upgrade` or `--refresh`. This mirrors the `npm ci` and pinned-`requirements.txt` caveat in the AWS post |
+| Existing `uv.lock` installs | No - `uv lock` records the resolved `exclude-newer` timestamp (and its `exclude-newer-span`) into the lockfile, and `uv sync` honours that until you pass `--upgrade` or `--refresh`. This mirrors the `npm ci` and pinned-`requirements.txt` caveat in the AWS post |
 | Managed Python interpreter downloads (`uv python install`) | No - `exclude-newer` applies to package resolution only |
 | A `pip` inside your own project venvs | No - `pip` has its own `global.uploaded-prior-to` setting. The managed venv contains no `pip` |
 
 > [!IMPORTANT]
-> `UV_EXCLUDE_NEWER` is uv's own environment variable, so unlike `REDMATTER_UV` it cannot be namespaced. Sourcing `env.sh` therefore applies the cooldown to **any** `uv` on your `PATH`, not just the managed one. If you need a completely untouched uv in a given shell, `unset UV_EXCLUDE_NEWER` or install with `--cooldown P0D`.
+> `UV_EXCLUDE_NEWER` is uv's own environment variable, so unlike `REDMATTER_UV` it cannot be namespaced. Sourcing `env.sh` therefore applies the cooldown to **any** `uv` on your `PATH`, not just the managed one. To get a completely untouched uv in the shell you are already in, run `unset UV_EXCLUDE_NEWER` — reinstalling with `--cooldown P0D` only comments the assignment out, which affects new shells and future sources, not the current one.
 
 ## Usage
 

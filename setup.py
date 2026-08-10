@@ -184,6 +184,10 @@ def _cooldown_lines(cooldown: str, comment: str, assign: str) -> list[str]:
     When the cooldown is disabled the assignment is emitted commented-out, so
     the file still documents the decision without touching the environment.
 
+    The hint text avoids angle brackets on purpose: env.bat is consumed by CMD,
+    where < and > are redirection operators, and relying on ":: " label
+    semantics to suppress them is not a bet worth taking.
+
     Args:
         cooldown: The cooldown duration, e.g. "P1D". Any zero-length value
             (P0D, PT0H, "0 days") means disabled.
@@ -197,7 +201,7 @@ def _cooldown_lines(cooldown: str, comment: str, assign: str) -> list[str]:
     lines = [
         f"{comment} Package cooldown - ignore distributions uploaded within this window.",
         f"{comment} Applies to uv/uvx resolution. Bypass for an urgent patch with:",
-        f"{comment}   uv pip install --exclude-newer {_COOLDOWN_OFF} <package>",
+        f"{comment}   uv pip install --exclude-newer {_COOLDOWN_OFF} PACKAGE",
     ]
     if _is_zero_cooldown(cooldown):
         lines.append(f"{comment} Cooldown disabled at install time (--cooldown {cooldown}).")
@@ -535,7 +539,7 @@ def main() -> None:
         _warn(f"disabled (--cooldown {args.cooldown}) - fresh releases will be installed immediately")
     else:
         _ok(f"UV_EXCLUDE_NEWER={args.cooldown} - packages uploaded within this window are ignored")
-        _info(f"Urgent patch? uv pip install --exclude-newer {_COOLDOWN_OFF} <package>")
+        _info(f"Urgent patch? uv pip install --exclude-newer {_COOLDOWN_OFF} PACKAGE")
 
     if args.shell_profile:
         _update_shell_profile(prefix)

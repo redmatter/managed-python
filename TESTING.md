@@ -74,6 +74,69 @@ cat /tmp/mp-test/env.sh
 
 **Expect:** exits with `ERROR: --python is required`
 
+### Test 5 — Package cooldown (default)
+
+```bash
+rm -rf /tmp/mp-test
+./install.sh --prefix /tmp/mp-test --python 3.10 --env-prefix TEST
+grep UV_EXCLUDE_NEWER /tmp/mp-test/env.sh /tmp/mp-test/env.ps1
+grep cooldown /tmp/mp-test/distro.toml
+```
+
+**Expect:**
+
+- Install output shows `✓ UV_EXCLUDE_NEWER=P1D`
+- `env.sh` contains `export UV_EXCLUDE_NEWER="P1D"`, `env.ps1` contains `$env:UV_EXCLUDE_NEWER = "P1D"`
+- `distro.toml` `[install]` contains `cooldown = "P1D"`
+
+### Test 6 — Cooldown actually bites
+
+Uses a deliberately long window so the effect is unmistakable.
+
+```bash
+rm -rf /tmp/mp-test
+./install.sh --prefix /tmp/mp-test --python 3.10 --env-prefix TEST --cooldown P365D -q
+source /tmp/mp-test/env.sh
+"$TEST_UV" pip install --dry-run --python "$TEST_PYTHON" requests | grep '+ requests'
+"$TEST_UV" pip install --dry-run --exclude-newer P0D --python "$TEST_PYTHON" requests | grep '+ requests'
+```
+
+**Expect:** the first command resolves a visibly older `requests` than the second — proving both the
+cooldown and the command-line bypass work.
+
+### Test 7 — Cooldown disabled
+
+```bash
+rm -rf /tmp/mp-test
+./install.sh --prefix /tmp/mp-test --python 3.10 --env-prefix TEST --cooldown P0D
+```
+
+**Expect:**
+
+- Install output warns `⚠ disabled (--cooldown P0D)`
+- `env.sh` contains the `UV_EXCLUDE_NEWER` line **commented out** — sourcing it sets nothing
+- `distro.toml` contains `cooldown = "P0D"`
+
+Repeat with the other zero-length spellings — `PT0H`, `P0W`, `0 days` — and expect the **same**
+disabled treatment each time. A zero window is a zero window however it is written, and the
+installer must never claim a cooldown it does not have.
+
+### Test 8 — Invalid cooldown rejected
+
+The value is validated by running it past uv itself (offline), so uv's own error is surfaced.
+
+```bash
+./install.sh --prefix /tmp/mp-test --python 3.10 --env-prefix TEST --cooldown yesterday
+```
+
+**Expect:** exits `1` with `ERROR: --cooldown 'yesterday' was rejected by uv:` followed by uv's
+own message, and **no** `env.sh` / `env.ps1` / `distro.toml` written to the prefix.
+
+Values that MUST be rejected: `yesterday`, `1 fortnight`, `P`, `2026-01-01T:`, `2026-01-01 ::::`
+
+Values that MUST be accepted: `P1D`, `PT12H`, `P2W`, `P1DT2H`, `3 days`, `2026-01-01`,
+`2026-01-01T00:00:00Z`
+
 ---
 
 ## Windows (PowerShell)
@@ -127,6 +190,20 @@ Get-Content C:\Users\Quickemu\temp\mp-test\env.ps1
 ```
 
 **Expect:** PowerShell parameter binding error — `-MinPython` is not a recognised parameter.
+
+### Windows: Test 5 — Package cooldown
+
+```powershell
+Remove-Item C:\Users\Quickemu\temp\mp-test -Recurse -Force
+.\install.ps1 -Prefix "C:\Users\Quickemu\temp\mp-test" -Python "3.10" -EnvPrefix "TEST"
+Select-String UV_EXCLUDE_NEWER C:\Users\Quickemu\temp\mp-test\env.ps1, C:\Users\Quickemu\temp\mp-test\env.bat
+Select-String cooldown C:\Users\Quickemu\temp\mp-test\distro.toml
+```
+
+**Expect:** `env.ps1` contains `$env:UV_EXCLUDE_NEWER = "P1D"`, `env.bat` contains
+`SET UV_EXCLUDE_NEWER=P1D`, and `distro.toml` records `cooldown = "P1D"`.
+
+Repeat with `-Cooldown "P0D"` and expect both assignments commented out.
 
 ---
 

@@ -216,7 +216,7 @@ isolated      = false
 
 Re-running `install.sh` with the same args is always safe:
 
-- uv download skipped if pinned version already installed
+- uv download skipped only if **both** `uv` and `uvx` are present and `uv` matches the pinned version — a missing `uvx` re-downloads the pair, since they ship in one archive
 - venv creation skipped if `venv/bin/python` already works
 - All generated files (`env.sh`, `env.ps1`, `bin/`, `distro.toml`) are always regenerated (cheap, ensures correctness)
 

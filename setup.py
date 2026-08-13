@@ -14,12 +14,24 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 _IS_WINDOWS = sys.platform == "win32"
 _QUIET = False
+
+# Default package cooldown: ignore distributions uploaded in the last 24 hours.
+# Malicious releases are usually spotted and yanked within hours, so waiting a
+# day is cheap insurance against being patient zero.
+_DEFAULT_COOLDOWN = "P1D"
+
+# "No cooldown" — a zero-length duration, which uv accepts. Note that uv's
+# documented "off" value (false) is only valid in uv.toml, NOT as an env var.
+_COOLDOWN_OFF = "P0D"
 
 
 # ── TOML (minimal key=value reader, no deps) ─────────────────────────────────
@@ -111,6 +123,95 @@ def _path_decision(bin_dir: Path) -> tuple[bool, list[str]]:
     return True, notes
 
 
+# ── Package cooldown ──────────────────────────────────────────────────────────
+
+def _is_zero_cooldown(cooldown: str) -> bool:
+    """Return True when the cooldown is a zero-length window, i.e. no cooldown.
+
+    uv accepts several spellings of "no window" (P0D, PT0H, "0 days") and they
+    all mean the same thing, so they must all be reported the same way. A date
+    or timestamp can never be all-zeros, so no special-casing is needed.
+
+    Args:
+        cooldown: A value already validated by _validate_cooldown.
+
+    Returns:
+        True when every numeric component of the value is zero.
+    """
+    digits = re.findall(r"\d+", cooldown)
+    return bool(digits) and all(int(d) == 0 for d in digits)
+
+
+def _validate_cooldown(prefix: Path, cooldown: str) -> str | None:
+    """Ask uv itself whether it accepts the cooldown value.
+
+    Delegating beats hand-rolling a grammar: uv is the only consumer of this
+    value, so its parser is the only opinion that matters. Runs fully offline
+    against an empty requirements list, so it is cheap and network-free.
+
+    Args:
+        prefix: The install prefix containing the bootstrapped uv binary.
+        cooldown: The candidate --cooldown value.
+
+    Returns:
+        uv's error message when the value is rejected, otherwise None. Also
+        returns None when uv cannot be run at all, so a broken validator never
+        blocks an install.
+    """
+    uv_bin = prefix / ("uv.exe" if _IS_WINDOWS else "uv")
+    if not uv_bin.exists():
+        return None
+
+    with tempfile.TemporaryDirectory() as tmp:
+        try:
+            proc = subprocess.run(
+                [str(uv_bin), "pip", "compile", "--offline", "--quiet", "--no-cache",
+                 "--exclude-newer", cooldown, "-", "-o", str(Path(tmp) / "out.txt")],
+                input="", capture_output=True, text=True, timeout=60,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return None
+
+    for line in proc.stderr.splitlines():
+        if "invalid value" in line:
+            return line.strip()
+    return None
+
+
+def _cooldown_lines(cooldown: str, comment: str, assign: str) -> list[str]:
+    """Render the UV_EXCLUDE_NEWER block for a generated env file.
+
+    When the cooldown is disabled the assignment is emitted commented-out, so
+    the file still documents the decision without touching the environment.
+
+    The hint text avoids angle brackets on purpose: env.bat is consumed by CMD,
+    where < and > are redirection operators, and relying on ":: " label
+    semantics to suppress them is not a bet worth taking.
+
+    Args:
+        cooldown: The cooldown duration, e.g. "P1D". Any zero-length value
+            (P0D, PT0H, "0 days") means disabled.
+        comment: The comment marker for the target format ("#" or "::").
+        assign: A format string with one {} placeholder for the value, e.g.
+            'export UV_EXCLUDE_NEWER="{}"'.
+
+    Returns:
+        The lines to append to the generated env file.
+    """
+    lines = [
+        f"{comment} Package cooldown - ignore distributions uploaded within this window.",
+        f"{comment} Applies to uv/uvx resolution. Bypass for an urgent patch with:",
+        f"{comment}   uv pip install --exclude-newer {_COOLDOWN_OFF} PACKAGE",
+    ]
+    if _is_zero_cooldown(cooldown):
+        lines.append(f"{comment} Cooldown disabled at install time (--cooldown {cooldown}).")
+        lines.append(f"{comment} {assign.format(_DEFAULT_COOLDOWN)}")
+    else:
+        lines.append(assign.format(cooldown))
+    lines.append("")
+    return lines
+
+
 # ── bin/ wrappers ─────────────────────────────────────────────────────────────
 
 def _symlink(link: Path, target: Path) -> None:
@@ -157,7 +258,8 @@ def _to_sh_path(p: Path) -> str:
     return s
 
 
-def _write_env_sh(prefix: Path, uv_env: str, uvx_env: str, python_env: str, distro_version: str, *, isolated: bool = False) -> None:
+def _write_env_sh(prefix: Path, uv_env: str, uvx_env: str, python_env: str,
+                  distro_version: str, cooldown: str, *, isolated: bool = False) -> None:
     _step("Writing env.sh")
 
     if _IS_WINDOWS:
@@ -180,6 +282,7 @@ def _write_env_sh(prefix: Path, uv_env: str, uvx_env: str, python_env: str, dist
         f'export {python_env}="{_to_sh_path(venv_py)}"',
         "",
     ]
+    lines += _cooldown_lines(cooldown, "#", 'export UV_EXCLUDE_NEWER="{}"')
 
     if _IS_WINDOWS:
         # bin/ wrappers on Windows are .cmd files — not usable in Git Bash.
@@ -210,7 +313,8 @@ def _write_env_sh(prefix: Path, uv_env: str, uvx_env: str, python_env: str, dist
 
 # ── env.ps1 ───────────────────────────────────────────────────────────────────
 
-def _write_env_ps1(prefix: Path, uv_env: str, uvx_env: str, python_env: str, distro_version: str, *, isolated: bool = False) -> None:
+def _write_env_ps1(prefix: Path, uv_env: str, uvx_env: str, python_env: str,
+                   distro_version: str, cooldown: str, *, isolated: bool = False) -> None:
     _step("Writing env.ps1")
 
     uv_exe  = prefix / ("uv.exe" if _IS_WINDOWS else "uv")
@@ -238,6 +342,7 @@ def _write_env_ps1(prefix: Path, uv_env: str, uvx_env: str, python_env: str, dis
     if _IS_WINDOWS:
         lines.append('$env:PYTHONUTF8 = "1"')
     lines.append("")
+    lines += _cooldown_lines(cooldown, "#", '$env:UV_EXCLUDE_NEWER = "{}"')
 
     if add_to_path:
         lines += [f"# {n}" for n in notes]
@@ -252,7 +357,8 @@ def _write_env_ps1(prefix: Path, uv_env: str, uvx_env: str, python_env: str, dis
 
 # ── env.bat ───────────────────────────────────────────────────────────────────
 
-def _write_env_bat(prefix: Path, uv_env: str, uvx_env: str, python_env: str, distro_version: str, *, isolated: bool = False) -> None:
+def _write_env_bat(prefix: Path, uv_env: str, uvx_env: str, python_env: str,
+                   distro_version: str, cooldown: str, *, isolated: bool = False) -> None:
     if not _IS_WINDOWS:
         return
 
@@ -279,6 +385,7 @@ def _write_env_bat(prefix: Path, uv_env: str, uvx_env: str, python_env: str, dis
         'SET PYTHONUTF8=1',
         "",
     ]
+    lines += _cooldown_lines(cooldown, "::", "SET UV_EXCLUDE_NEWER={}")
 
     if add_to_path:
         lines += [f":: {n}" for n in notes]
@@ -300,6 +407,7 @@ def _write_installed_distro_toml(
     uvx_env: str,
     python_env: str,
     shell_profile: bool,
+    cooldown: str,
     isolated: bool = False,
 ) -> None:
     """
@@ -314,6 +422,7 @@ def _write_installed_distro_toml(
         f'uv_env       = "{uv_env}"\n'
         f'uvx_env      = "{uvx_env}"\n'
         f'python_env   = "{python_env}"\n'
+        f'cooldown     = "{cooldown}"\n'
         f"shell_profile = {'true' if shell_profile else 'false'}\n"
         f"isolated      = {'true' if isolated else 'false'}\n"
     )
@@ -369,11 +478,18 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--uv-env",       dest="uv_env",               help="Env var name for uv path")
     p.add_argument("--uvx-env",      dest="uvx_env",              help="Env var name for uvx path")
     p.add_argument("--python-env",   dest="python_env",           help="Env var name for python path")
+    p.add_argument("--cooldown",     default=_DEFAULT_COOLDOWN,
+                   help=f"Ignore packages uploaded within this window "
+                        f"(default: {_DEFAULT_COOLDOWN}). Accepts a duration "
+                        f"(P1D, '2 days', PT12H), a date, or a timestamp. "
+                        f"Use {_COOLDOWN_OFF} to disable.")
     p.add_argument("--shell-profile", action="store_true", dest="shell_profile")
     p.add_argument("--isolated",     action="store_true", dest="isolated")
     p.add_argument("--quiet", "-q", action="store_true", dest="quiet",
                    help="Suppress all output except warnings")
     args = p.parse_args()
+
+    args.cooldown = args.cooldown.strip()
 
     individual = [args.uv_env, args.uvx_env, args.python_env]
     if args.env_prefix:
@@ -399,14 +515,31 @@ def main() -> None:
 
     distro_version = _toml_get(script_dir / "distro.toml", "version")
 
+    # Validate before writing anything — a bad cooldown would otherwise poison
+    # every uv invocation of everyone who sources the generated env files.
+    rejection = _validate_cooldown(prefix, args.cooldown)
+    if rejection:
+        print(f"ERROR: --cooldown {args.cooldown!r} was rejected by uv:\n  {rejection}", file=sys.stderr)
+        sys.exit(1)
+
     _create_bin(prefix)
-    _write_env_sh(prefix, args.uv_env, args.uvx_env, args.python_env, distro_version, isolated=args.isolated)
-    _write_env_ps1(prefix, args.uv_env, args.uvx_env, args.python_env, distro_version, isolated=args.isolated)
-    _write_env_bat(prefix, args.uv_env, args.uvx_env, args.python_env, distro_version, isolated=args.isolated)
+    _write_env_sh(prefix, args.uv_env, args.uvx_env, args.python_env, distro_version,
+                  args.cooldown, isolated=args.isolated)
+    _write_env_ps1(prefix, args.uv_env, args.uvx_env, args.python_env, distro_version,
+                   args.cooldown, isolated=args.isolated)
+    _write_env_bat(prefix, args.uv_env, args.uvx_env, args.python_env, distro_version,
+                   args.cooldown, isolated=args.isolated)
     _write_installed_distro_toml(
         script_dir, prefix, args.python_version, args.uv_env, args.uvx_env, args.python_env, args.shell_profile,
-        isolated=args.isolated,
+        args.cooldown, isolated=args.isolated,
     )
+
+    _step("Package cooldown")
+    if _is_zero_cooldown(args.cooldown):
+        _warn(f"disabled (--cooldown {args.cooldown}) - fresh releases will be installed immediately")
+    else:
+        _ok(f"UV_EXCLUDE_NEWER={args.cooldown} - packages uploaded within this window are ignored")
+        _info(f"Urgent patch? uv pip install --exclude-newer {_COOLDOWN_OFF} PACKAGE")
 
     if args.shell_profile:
         _update_shell_profile(prefix)

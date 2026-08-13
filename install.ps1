@@ -22,6 +22,7 @@ param(
     [Parameter(Mandatory=$false)] [string]$UvEnv,
     [Parameter(Mandatory=$false)] [string]$UvxEnv,
     [Parameter(Mandatory=$false)] [string]$PythonEnv,
+    [Parameter(Mandatory=$false)] [string]$Cooldown,
     [switch]$ShellProfile,
     [switch]$Quiet,
     [switch]$Isolated
@@ -137,6 +138,7 @@ if ($EnvPrefix) {
 } else {
     $setupArgs = @("--prefix", $Prefix, "--python", $Python, "--uv-env", $UvEnv, "--uvx-env", $UvxEnv, "--python-env", $PythonEnv)
 }
+if ($Cooldown) { $setupArgs += @("--cooldown", $Cooldown) }
 if ($ShellProfile) { $setupArgs += "--shell-profile" }
 if ($Isolated) { $setupArgs += "--isolated" }
 if ($Quiet) { $setupArgs += "--quiet" }

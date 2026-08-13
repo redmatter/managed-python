@@ -94,13 +94,14 @@ source ~/.local/redmatter/python/env.sh
 ## Options
 
 | Flag | Required | Purpose |
-|------|----------|---------|
+| ------ | ---------- | --------- |
 | `--prefix PATH` | yes | Install location |
 | `--python X.Y` | yes | Python version for venv. Default mode: prefer matching system Python, fall back to uv-managed. Isolated mode: always uv-managed. |
 | `--env-prefix NAME` | yes* | Derives `NAME_UV`, `NAME_UVX`, and `NAME_PYTHON` — preferred over the three flags below |
 | `--uv-env NAME` | yes* | Env var name for the uv binary path |
 | `--uvx-env NAME` | yes* | Env var name for the uvx binary path |
 | `--python-env NAME` | yes* | Env var name for the python binary path |
+| `--cooldown DURATION` | no | Package cooldown, default `P1D`. Ignores distributions uploaded within the window. `P0D` disables. See [Package cooldown](#package-cooldown) |
 | `--isolated` | no | Force uv-managed Python (ignores system Python); always adds `bin/` to PATH |
 | `--shell-profile` | no | Append `source <prefix>/env.sh` to shell rc |
 | `--quiet` / `-q` | no | Suppress all output except warnings |
@@ -109,6 +110,45 @@ source ~/.local/redmatter/python/env.sh
 
 > [!NOTE]
 > **Choosing a mode:** Use the default on developer machines where a system Python already exists. Use `--isolated` in CI, containers, or shared servers where you need a fully reproducible environment independent of whatever Python is (or isn't) installed on the host.
+
+## Package cooldown
+
+Every install ships a **1-day package cooldown** by default: the generated env files export `UV_EXCLUDE_NEWER="P1D"`, so uv ignores any distribution uploaded in the last 24 hours.
+
+This is deliberate, and it follows the guidance in the AWS Security Blog post [Secure your npm and pip package updates in Amazon Linux](https://aws.amazon.com/blogs/security/secure-your-npm-and-pip-package-updates-in-amazon-linux/). Modern supply-chain attacks publish a malicious version and rely on it being pulled into builds within minutes, while detection and yanking typically happen within hours. Waiting a day costs you almost nothing and keeps you out of the blast radius - patience really is a virtue here.
+
+`--cooldown` accepts anything uv's `--exclude-newer` accepts: an ISO 8601 duration (`P1D`, `PT12H`, `P2W`), a friendly duration (`3 days`), a date (`2026-01-01`), or an RFC 3339 timestamp. `P0D` turns the cooldown off.
+
+```bash
+./install.sh --prefix ~/.local/redmatter/python --python 3.10 \
+  --env-prefix REDMATTER --cooldown "3 days"
+```
+
+### Overriding for an urgent patch
+
+The cooldown is a default, not a cage. A command-line flag beats the env var:
+
+```bash
+# Bypass the cooldown entirely for one command
+"$REDMATTER_UV" pip install --exclude-newer P0D --python "$REDMATTER_PYTHON" some-package
+
+# Or bypass it for one package only, keeping the cooldown for everything else
+"$REDMATTER_UV" pip install --exclude-newer-package some-package=P0D \
+  --python "$REDMATTER_PYTHON" some-package
+```
+
+### What it does and does not cover
+
+| Scope | Covered? |
+| ------ | ---------- |
+| `uv pip install`, `uv add`, `uv lock`, `uv sync` resolution | Yes |
+| `uvx` / `uv tool install` resolution | Yes |
+| Existing `uv.lock` installs | No - `uv lock` records the resolved `exclude-newer` timestamp (and its `exclude-newer-span`) into the lockfile, and `uv sync` honours that until you pass `--upgrade` or `--refresh`. This mirrors the `npm ci` and pinned-`requirements.txt` caveat in the AWS post |
+| Managed Python interpreter downloads (`uv python install`) | No - `exclude-newer` applies to package resolution only |
+| A `pip` inside your own project venvs | No - `pip` has its own `global.uploaded-prior-to` setting. The managed venv contains no `pip` |
+
+> [!IMPORTANT]
+> `UV_EXCLUDE_NEWER` is uv's own environment variable, so unlike `REDMATTER_UV` it cannot be namespaced. Sourcing `env.sh` therefore applies the cooldown to **any** `uv` on your `PATH`, not just the managed one. To get a completely untouched uv in the shell you are already in, run `unset UV_EXCLUDE_NEWER` — reinstalling with `--cooldown P0D` only comments the assignment out, which affects new shells and future sources, not the current one.
 
 ## Usage
 
@@ -146,9 +186,9 @@ exec "$PYTHON" script.py
   venv/
     bin/python                # Linux/macOS
     Scripts/python.exe        # Windows
-  env.sh                      # exports env vars + conditional PATH (bash)
-  env.ps1                     # exports env vars + conditional PATH (PowerShell)
-  env.bat                     # exports env vars + conditional PATH (CMD / restricted PS)
+  env.sh                      # exports env vars + cooldown + conditional PATH (bash)
+  env.ps1                     # exports env vars + cooldown + conditional PATH (PowerShell)
+  env.bat                     # exports env vars + cooldown + conditional PATH (CMD / restricted PS)
   distro.toml                 # source version record + [install] options
 ```
 
@@ -167,6 +207,7 @@ python       = "3.10"
 uv_env       = "REDMATTER_UV"
 uvx_env      = "REDMATTER_UVX"
 python_env   = "REDMATTER_PYTHON"
+cooldown     = "P1D"
 shell_profile = false
 isolated      = false
 ```

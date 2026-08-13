@@ -2,7 +2,8 @@
 # install.sh — Bootstrap uv + Python venv, then hand off to setup.py
 #
 # Usage:
-#   ./install.sh --prefix PATH --python X.Y --uv-env NAME --python-env NAME [--isolated] [--shell-profile]
+#   ./install.sh --prefix PATH --python X.Y --uv-env NAME --python-env NAME \
+#                [--cooldown DURATION] [--isolated] [--shell-profile]
 #
 # Bootstrap phase (this script): download uv, create venv.
 # Configuration phase (setup.py): env.sh, env.ps1, bin/ wrappers, shell profile.

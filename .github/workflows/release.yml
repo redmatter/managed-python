@@ -16,7 +16,10 @@ jobs:
 
       - name: Verify tag matches distro.toml version
         run: |
-          TOML_VERSION="$(grep '^version' distro.toml | sed -E 's/^[^=]+=\s*"([^"]+)".*/\1/')"
+          # Uses the POSIX [[:space:]] class rather than the GNU-only shorthand,
+          # so this check can be reproduced locally on macOS (BSD sed) too.
+          # Keeps one dialect across the repo - matches install.sh (see #2).
+          TOML_VERSION="$(grep '^version' distro.toml | sed -E 's/^[^=]+=[[:space:]]*"([^"]+)".*/\1/')"
           TAG_VERSION="${GITHUB_REF_NAME#v}"
           if [[ "$TAG_VERSION" != "$TOML_VERSION" ]]; then
             echo "ERROR: tag ${GITHUB_REF_NAME} does not match distro.toml version ${TOML_VERSION}"

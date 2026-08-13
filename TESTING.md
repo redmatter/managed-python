@@ -137,6 +137,43 @@ Values that MUST be rejected: `yesterday`, `1 fortnight`, `P`, `2026-01-01T:`, `
 Values that MUST be accepted: `P1D`, `PT12H`, `P2W`, `P1DT2H`, `3 days`, `2026-01-01`,
 `2026-01-01T00:00:00Z`
 
+### Test 9 — Missing `uvx` forces a re-download
+
+Guards against the bug in [#9](https://github.com/redmatter/managed-python/issues/9): the skip
+condition used to check `uv`'s version only, so a prefix predating `uvx` could keep a broken
+`bin/uvx` forever.
+
+```bash
+./install.sh --prefix /tmp/mp-test --python 3.10 --env-prefix TEST --isolated
+rm -f /tmp/mp-test/uvx /tmp/mp-test/bin/uvx
+./install.sh --prefix /tmp/mp-test --python 3.10 --env-prefix TEST --isolated
+source /tmp/mp-test/env.sh && "$TEST_UVX" --version
+```
+
+**Expect:** the second install prints `→ Downloading uv X.Y.Z` (not `✓ uv X.Y.Z`), keeps
+`✓ venv already exists`, and `$TEST_UVX --version` prints a version rather than
+`No such file or directory`.
+
+Then re-run Test 3 — a **complete** prefix must still print `✓ uv X.Y.Z` and skip the download.
+
+### Test 10 — setup.py refuses to wrap a missing binary
+
+`setup.py` will not create a wrapper pointing at thin air, even when run on its own.
+
+```bash
+mv /tmp/mp-test/uvx /tmp/uvx.bak
+/tmp/mp-test/venv/bin/python setup.py --prefix /tmp/mp-test --python 3.10 --env-prefix TEST --isolated
+echo "exit=$?"
+mv /tmp/uvx.bak /tmp/mp-test/uvx
+```
+
+**Expect:** exits `1` with `ERROR: bootstrap incomplete - these are missing from the prefix:`
+naming `uvx`, before any `==>` step header is printed, and with **no** `bin/` wrappers or env
+files rewritten.
+
+A missing `uv` must be caught the same way — that ordering matters, because cooldown validation
+silently no-ops when `uv` cannot be run.
+
 ---
 
 ## Windows (PowerShell)
@@ -204,6 +241,20 @@ Select-String cooldown C:\Users\Quickemu\temp\mp-test\distro.toml
 `SET UV_EXCLUDE_NEWER=P1D`, and `distro.toml` records `cooldown = "P1D"`.
 
 Repeat with `-Cooldown "P0D"` and expect both assignments commented out.
+
+### Windows: Test 6 — Missing `uvx.exe` forces a re-download
+
+The Windows half of Test 9.
+
+```powershell
+Remove-Item C:\Users\Quickemu\temp\mp-test\uvx.exe, C:\Users\Quickemu\temp\mp-test\bin\uvx.cmd -Force
+.\install.ps1 -Prefix "C:\Users\Quickemu\temp\mp-test" -Python "3.10" -EnvPrefix "TEST"
+. C:\Users\Quickemu\temp\mp-test\env.ps1
+& $env:TEST_UVX --version
+```
+
+**Expect:** `→ Downloading uv X.Y.Z` rather than `✓ uv X.Y.Z`, `✓ venv already exists`, and
+`uvx --version` prints a version. Re-running on the restored prefix must skip the download again.
 
 ---
 

@@ -220,6 +220,34 @@ def _symlink(link: Path, target: Path) -> None:
     link.symlink_to(target)
 
 
+def _require_bootstrapped(prefix: Path) -> None:
+    """Fail loudly if the bootstrap phase did not leave every binary behind.
+
+    A wrapper pointing at thin air is never a valid outcome: on POSIX it is a
+    dangling symlink, on Windows a .cmd that fails later with a baffling error.
+    Better to stop here, while the cause is still obvious.
+
+    Args:
+        prefix: The install prefix that the bootstrap phase populated.
+
+    Raises:
+        SystemExit: Exit code 1 when any expected binary is missing.
+    """
+    if _IS_WINDOWS:
+        expected = [prefix / "uv.exe", prefix / "uvx.exe", prefix / "venv" / "Scripts" / "python.exe"]
+    else:
+        expected = [prefix / "uv", prefix / "uvx", prefix / "venv" / "bin" / "python"]
+    missing = [p for p in expected if not p.exists()]
+    if missing:
+        listed = "\n".join(f"  {p}" for p in missing)
+        print(
+            f"ERROR: bootstrap incomplete - these are missing from the prefix:\n{listed}\n"
+            "       Re-run the installer to fetch them before configuring this prefix.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+
 def _create_bin(prefix: Path) -> None:
     _step("Creating bin/ wrappers")
     bin_dir = prefix / "bin"
@@ -517,6 +545,9 @@ def main() -> None:
 
     # Validate before writing anything — a bad cooldown would otherwise poison
     # every uv invocation of everyone who sources the generated env files.
+    # Order matters: the bootstrap check runs first so that uv is known to be
+    # present, otherwise _validate_cooldown quietly skips validation entirely.
+    _require_bootstrapped(prefix)
     rejection = _validate_cooldown(prefix, args.cooldown)
     if rejection:
         print(f"ERROR: --cooldown {args.cooldown!r} was rejected by uv:\n  {rejection}", file=sys.stderr)

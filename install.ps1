@@ -52,6 +52,7 @@ $ErrorActionPreference = "Stop"
 $Prefix    = [Environment]::ExpandEnvironmentVariables($Prefix)
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $UvExe     = Join-Path $Prefix "uv.exe"
+$UvxExe    = Join-Path $Prefix "uvx.exe"
 $VenvPy    = Join-Path $Prefix "venv\Scripts\python.exe"
 
 # Read pinned uv version from distro.toml
@@ -67,7 +68,9 @@ Write-Msg ""
 
 # Bootstrap uv
 $currentVer = if (Test-Path $UvExe) { try { (& $UvExe --version 2>$null) -split " " | Select-Object -Last 1 } catch { "" } } else { "" }
-if ($currentVer -eq $UvVersion) {
+# uvx.exe must exist too - a prefix predating uvx can match the pinned version
+# while missing it entirely, and skipping the download would leave it that way.
+if (($currentVer -eq $UvVersion) -and (Test-Path $UvxExe)) {
     Write-Msg "  ✓ uv $UvVersion"
 } else {
     Write-Msg "  → Downloading uv $UvVersion"
@@ -96,7 +99,7 @@ if ($currentVer -eq $UvVersion) {
         Copy-Item $uvSrc.FullName $UvExe -Force
         $uvxSrc = Get-ChildItem $tmpDir -Filter "uvx.exe" -Recurse | Select-Object -First 1
         if (-not $uvxSrc) { Write-Error "Failed to locate uvx.exe in archive"; exit 1 }
-        Copy-Item $uvxSrc.FullName (Join-Path $Prefix "uvx.exe") -Force
+        Copy-Item $uvxSrc.FullName $UvxExe -Force
     } catch {
         Write-Error "Failed to download uv $UvVersion from $url`: $_"
         exit 1
@@ -105,6 +108,10 @@ if ($currentVer -eq $UvVersion) {
     }
     if (-not (Test-Path $UvExe)) {
         Write-Error "Failed to download uv $UvVersion — binary not found after extraction"
+        exit 1
+    }
+    if (-not (Test-Path $UvxExe)) {
+        Write-Error "Failed to download uv $UvVersion — uvx.exe not found after extraction"
         exit 1
     }
     Write-Msg "  ✓ uv $UvVersion installed"

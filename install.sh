@@ -39,7 +39,11 @@ _bootstrap_uv() {
     local prefix="$1" uv_version="$2" distro_toml="$3"
     local uv_bin="${prefix}/uv"
 
-    if [[ -x "$uv_bin" ]] && \
+    # Both binaries must be present, not just uv - a prefix from before uvx
+    # existed can match the pinned version yet have no uvx at all, and a
+    # version-only check would happily skip the download and leave it missing.
+    # A missing uvx therefore re-downloads the pair; they ship in one archive.
+    if [[ -x "$uv_bin" ]] && [[ -x "${prefix}/uvx" ]] && \
        [[ "$("$uv_bin" --version 2>/dev/null | awk '{print $2}')" == "$uv_version" ]]; then
         _msg "  ✓ uv $uv_version"; return
     fi

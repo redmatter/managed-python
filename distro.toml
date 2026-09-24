@@ -1,6 +1,7 @@
 [distro]
-version = "0.11.0"      # bump on meaningful config changes; major = breaking (requires reinstall)
+version = "0.12.0"      # bump on meaningful config changes; major = breaking (requires reinstall)
 uv_version = "0.10.12"  # pinned uv release
+pyyaml_version = "6.0.3"
 
 # SHA256 checksums for the pinned uv release archives.
 # Update these whenever uv_version changes (run: release.py --uv-version X.Y.Z).

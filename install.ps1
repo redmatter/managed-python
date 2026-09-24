@@ -49,17 +49,24 @@ function Write-Msg($msg) { if (-not $Quiet) { Write-Host $msg } }
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$Prefix    = [Environment]::ExpandEnvironmentVariables($Prefix)
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$UvExe     = Join-Path $Prefix "uv.exe"
-$UvxExe    = Join-Path $Prefix "uvx.exe"
-$VenvPy    = Join-Path $Prefix "venv\Scripts\python.exe"
+$Prefix     = [Environment]::ExpandEnvironmentVariables($Prefix)
+$ScriptDir  = Split-Path -Parent $MyInvocation.MyCommand.Path
+$DistroToml = Join-Path $ScriptDir "distro.toml"
+$UvExe      = Join-Path $Prefix "uv.exe"
+$UvxExe     = Join-Path $Prefix "uvx.exe"
+$VenvPy     = Join-Path $Prefix "venv\Scripts\python.exe"
 
 # Read pinned uv version from distro.toml
-$UvVersion = (Get-Content (Join-Path $ScriptDir "distro.toml") |
+$UvVersion = (Get-Content $DistroToml |
     Select-String '^uv_version').Line `
     -replace '^[^=]+=\s*"?([^"#]+)"?.*', '$1' |
     ForEach-Object { $_.Trim() }
+
+$PyyamlVersion = Get-Content $DistroToml | Select-String '^pyyaml_version\s*=\s*"([^"]+)"' | ForEach-Object { $_.Matches.Groups[1].Value }
+if (-not $PyyamlVersion) {
+    Write-Error "No pinned pyyaml_version in distro.toml"
+    exit 1
+}
 
 Write-Msg ""
 Write-Msg "managed-python bootstrap"
@@ -135,6 +142,23 @@ if (Test-Path $VenvPy) {
         exit 1
     }
     Write-Msg "  ✓ venv created"
+}
+
+if ($PyyamlVersion) {
+    & $VenvPy -c "import sys, yaml; sys.exit(0 if yaml.__version__ == sys.argv[1] else 1)" $PyyamlVersion 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        Write-Msg "  ✓ pyyaml $PyyamlVersion"
+    } else {
+        Write-Msg "  → Installing pyyaml $PyyamlVersion"
+        $pipArgs = @("pip", "install", "--python", $VenvPy, "pyyaml==$PyyamlVersion")
+        if ($Quiet) { $pipArgs += "--quiet" }
+        & $UvExe @pipArgs
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to install pyyaml $PyyamlVersion"
+            exit $LASTEXITCODE
+        }
+        Write-Msg "  ✓ pyyaml $PyyamlVersion installed"
+    }
 }
 
 Write-Msg ""

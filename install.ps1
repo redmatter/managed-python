@@ -63,6 +63,10 @@ $UvVersion = (Get-Content $DistroToml |
     ForEach-Object { $_.Trim() }
 
 $PyyamlVersion = Get-Content $DistroToml | Select-String '^pyyaml_version\s*=\s*"([^"]+)"' | ForEach-Object { $_.Matches.Groups[1].Value }
+if (-not $PyyamlVersion) {
+    Write-Error "No pinned pyyaml_version in distro.toml"
+    exit 1
+}
 
 Write-Msg ""
 Write-Msg "managed-python bootstrap"
@@ -141,7 +145,7 @@ if (Test-Path $VenvPy) {
 }
 
 if ($PyyamlVersion) {
-    & $VenvPy -c "import yaml; assert yaml.__version__ == '$PyyamlVersion'" 2>$null
+    & $VenvPy -c "import sys, yaml; sys.exit(0 if yaml.__version__ == sys.argv[1] else 1)" $PyyamlVersion 2>$null
     if ($LASTEXITCODE -eq 0) {
         Write-Msg "  ✓ pyyaml $PyyamlVersion"
     } else {

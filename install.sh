@@ -123,7 +123,7 @@ _bootstrap_packages() {
     [[ -z "$pyyaml_version" ]] && return 0
 
     local venv_py="${prefix}/venv/bin/python"
-    if [[ -x "$venv_py" ]] && "$venv_py" -c "import yaml; assert yaml.__version__ == '$pyyaml_version'" &>/dev/null; then
+    if [[ -x "$venv_py" ]] && "$venv_py" -c "import sys, yaml; sys.exit(0 if yaml.__version__ == sys.argv[1] else 1)" "$pyyaml_version" &>/dev/null; then
         _msg "  ✓ pyyaml $pyyaml_version"; return
     fi
 
@@ -145,7 +145,10 @@ main() {
 
     local pyyaml_version
     pyyaml_version="$(grep '^pyyaml_version' "${script_dir}/distro.toml" \
-        | sed -E 's/^[^=]+=[[:space:]]*"?([^"#]+)"?.*/\1/' | tr -d '[:space:]' || true)"
+        | sed -E 's/^[^=]+=[[:space:]]*"?([^"#]+)"?.*/\1/' | tr -d '[:space:]')"
+    if [[ -z "$pyyaml_version" ]]; then
+        printf "ERROR: pyyaml_version is missing in %s/distro.toml\n" "$script_dir" >&2; exit 1
+    fi
 
     # Extract --prefix, --python, --isolated, and --quiet for bootstrap (all flags forwarded to setup.py)
     local prefix="" min_python="" isolated="" quiet=""

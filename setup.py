@@ -282,6 +282,10 @@ def _install_packages(prefix: Path, script_dir: Path) -> None:
     except KeyError:
         return
 
+    if not re.fullmatch(r"^\d+(\.\d+)+$", pyyaml_version):
+        _warn(f"Invalid pyyaml_version in distro.toml: {pyyaml_version!r}")
+        return
+
     uv_bin = prefix / ("uv.exe" if _IS_WINDOWS else "uv")
     venv_py = prefix / "venv" / ("Scripts" if _IS_WINDOWS else "bin") / ("python.exe" if _IS_WINDOWS else "python")
 
@@ -290,12 +294,18 @@ def _install_packages(prefix: Path, script_dir: Path) -> None:
         return
 
     # Check if pyyaml is already installed with matching version
-    check_cmd = [str(venv_py), "-c", f"import yaml; assert yaml.__version__ == '{pyyaml_version}'"]
+    check_cmd = [
+        str(venv_py),
+        "-c",
+        "import sys, yaml; sys.exit(0 if yaml.__version__ == sys.argv[1] else 1)",
+        pyyaml_version,
+    ]
     check = subprocess.run(check_cmd, capture_output=True)
     if check.returncode == 0:
         _ok(f"pyyaml {pyyaml_version} already installed")
         return
 
+    # nosemgrep
     proc = subprocess.run(
         [str(uv_bin), "pip", "install", "--python", str(venv_py), f"pyyaml=={pyyaml_version}", "--quiet"],
         capture_output=True, text=True

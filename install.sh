@@ -118,6 +118,21 @@ _bootstrap_venv() {
     _msg "  ✓ venv created"
 }
 
+_bootstrap_packages() {
+    local prefix="$1" pyyaml_version="$2"
+    [[ -z "$pyyaml_version" ]] && return 0
+
+    local venv_py="${prefix}/venv/bin/python"
+    if [[ -x "$venv_py" ]] && "$venv_py" -c "import yaml; assert yaml.__version__ == '$pyyaml_version'" &>/dev/null; then
+        _msg "  ✓ pyyaml $pyyaml_version"; return
+    fi
+
+    _msg "  → Installing pyyaml $pyyaml_version"
+    "${prefix}/uv" pip install --python "${prefix}/venv" "pyyaml==${pyyaml_version}" ${quiet:+--quiet} \
+        || { printf "ERROR: Failed to install pyyaml %s\n" "$pyyaml_version" >&2; exit 1; }
+    _msg "  ✓ pyyaml $pyyaml_version installed"
+}
+
 main() {
     set -euo pipefail
 
@@ -127,6 +142,10 @@ main() {
     local uv_version
     uv_version="$(grep '^uv_version' "${script_dir}/distro.toml" \
         | sed -E 's/^[^=]+=[[:space:]]*"?([^"#]+)"?.*/\1/' | tr -d '[:space:]')"
+
+    local pyyaml_version
+    pyyaml_version="$(grep '^pyyaml_version' "${script_dir}/distro.toml" \
+        | sed -E 's/^[^=]+=[[:space:]]*"?([^"#]+)"?.*/\1/' | tr -d '[:space:]' || true)"
 
     # Extract --prefix, --python, --isolated, and --quiet for bootstrap (all flags forwarded to setup.py)
     local prefix="" min_python="" isolated="" quiet=""
@@ -156,6 +175,7 @@ main() {
 
     _bootstrap_uv   "$prefix" "$uv_version" "${script_dir}/distro.toml"
     _bootstrap_venv "$prefix" "$min_python" "$isolated"
+    _bootstrap_packages "$prefix" "$pyyaml_version"
 
     _msg ""
     # All flags (including --env-prefix / --uv-env / --uvx-env / --python-env) are forwarded

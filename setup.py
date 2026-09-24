@@ -305,9 +305,18 @@ def _install_packages(prefix: Path, script_dir: Path) -> None:
         _ok(f"pyyaml {pyyaml_version} already installed")
         return
 
-    # nosemgrep
+    # Map supported versions to static package specifications to ensure argument safety
+    packages: dict[str, str] = {
+        "6.0.2": "pyyaml==6.0.2",
+        "6.0.3": "pyyaml==6.0.3",
+    }
+    package_spec = packages.get(pyyaml_version)
+    if not package_spec:
+        _warn(f"Unsupported pyyaml_version in distro.toml: {pyyaml_version!r}")
+        return
+
     proc = subprocess.run(
-        [str(uv_bin), "pip", "install", "--python", str(venv_py), f"pyyaml=={pyyaml_version}", "--quiet"],
+        [str(uv_bin), "pip", "install", "--python", str(venv_py), package_spec, "--quiet"],
         capture_output=True, text=True
     )
     if proc.returncode != 0:

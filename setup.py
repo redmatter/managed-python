@@ -272,6 +272,40 @@ def _create_bin(prefix: Path) -> None:
         _ok("bin/uvx \u2192 ../uvx")
 
 
+# ── Packages ──────────────────────────────────────────────────────────────────
+
+def _install_packages(prefix: Path, script_dir: Path) -> None:
+    """Install standard platform packages pinned in distro.toml into the managed venv."""
+    _step("Installing platform packages")
+    try:
+        pyyaml_version = _toml_get(script_dir / "distro.toml", "pyyaml_version")
+    except KeyError:
+        return
+
+    uv_bin = prefix / ("uv.exe" if _IS_WINDOWS else "uv")
+    venv_py = prefix / "venv" / ("Scripts" if _IS_WINDOWS else "bin") / ("python.exe" if _IS_WINDOWS else "python")
+
+    if not uv_bin.exists() or not venv_py.exists():
+        _warn("Skipping package installation (uv or venv missing)")
+        return
+
+    # Check if pyyaml is already installed with matching version
+    check_cmd = [str(venv_py), "-c", f"import yaml; assert yaml.__version__ == '{pyyaml_version}'"]
+    check = subprocess.run(check_cmd, capture_output=True)
+    if check.returncode == 0:
+        _ok(f"pyyaml {pyyaml_version} already installed")
+        return
+
+    proc = subprocess.run(
+        [str(uv_bin), "pip", "install", "--python", str(venv_py), f"pyyaml=={pyyaml_version}", "--quiet"],
+        capture_output=True, text=True
+    )
+    if proc.returncode != 0:
+        _warn(f"Failed to install pyyaml {pyyaml_version}: {proc.stderr.strip()}")
+    else:
+        _ok(f"pyyaml {pyyaml_version}")
+
+
 # ── env.sh ────────────────────────────────────────────────────────────────────
 
 def _to_sh_path(p: Path) -> str:
@@ -554,6 +588,7 @@ def main() -> None:
         sys.exit(1)
 
     _create_bin(prefix)
+    _install_packages(prefix, script_dir)
     _write_env_sh(prefix, args.uv_env, args.uvx_env, args.python_env, distro_version,
                   args.cooldown, isolated=args.isolated)
     _write_env_ps1(prefix, args.uv_env, args.uvx_env, args.python_env, distro_version,

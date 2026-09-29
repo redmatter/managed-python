@@ -88,8 +88,12 @@ python release.py --uv-version X.Y.Z   # also updates pinned checksums
 
 Add `--tag` to commit `distro.toml` and create a git tag in one step.
 
-`pyyaml_version` is the third pin in `distro.toml`. `release.py` does not manage it, so bump it
-with a direct edit in whichever commit needs the new version - there is no `--pyyaml-version` flag.
+`pyyaml_version` is the third pin in `distro.toml`, and this note is its authoritative home.
+`release.py` deliberately does not manage it: the bootstrap package set is one exact pin to an
+immutable release (see [Design Principles](#shell-scripts-do-the-minimum-necessary)), so a bump is
+a rare, considered act rather than a routine flag. Edit it directly in whichever commit needs the
+new wheel - there is no `--pyyaml-version` flag. [RELEASING.md](RELEASING.md) points here rather
+than restating the rule.
 
 ## Reporting Security Issues
 

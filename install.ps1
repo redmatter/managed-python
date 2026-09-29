@@ -4,16 +4,16 @@
     Bootstrap for managed-python on Windows.
 
 .DESCRIPTION
-    Downloads uv, creates a Python venv, then hands off to setup.py.
-    All configuration (env.ps1, env.sh, bin\ wrappers, shell profile) is
-    handled by setup.py.
+    Downloads uv, creates a Python venv, installs the pinned pyyaml wheel, then
+    hands off to setup.py. All configuration (env.ps1, env.sh, bin\ wrappers, shell
+    profile) is handled by setup.py.
 
 .EXAMPLE
-    .\install.ps1 -Prefix "$env:USERPROFILE\.local\redmatter\python" -Python "3.10" -EnvPrefix "REDMATTER"
+    .\install.ps1 -Prefix "$env:USERPROFILE\.local\redmatter\python" -Python "3.14" -EnvPrefix "REDMATTER"
 
 .EXAMPLE
     .\install.ps1 -Prefix "$env:USERPROFILE\.local\redmatter\python" `
-                  -Python "3.10" -UvEnv "REDMATTER_UV" -UvxEnv "REDMATTER_UVX" -PythonEnv "REDMATTER_PYTHON"
+                  -Python "3.14" -UvEnv "REDMATTER_UV" -UvxEnv "REDMATTER_UVX" -PythonEnv "REDMATTER_PYTHON"
 #>
 param(
     [Parameter(Mandatory=$true)]  [string]$Prefix,
@@ -58,24 +58,47 @@ $VenvPy     = Join-Path $Prefix "venv\Scripts\python.exe"
 
 # Read pinned versions from distro.toml. Select-Object -First 1 keeps each result a
 # single string, so a duplicated line cannot quietly become a two-element array.
-$UvVersion = Get-Content $DistroToml | Select-String '^uv_version\s*=\s*"?([^"#]+)"?' |
+$UvVersion = Get-Content $DistroToml | Select-String '^[ \t]*uv_version[ \t]*=[ \t]*"([^"#]+)"[ \t]*(?:#.*)?$' |
     Select-Object -First 1 | ForEach-Object { $_.Matches[0].Groups[1].Value.Trim() }
 
-$PyyamlVersion = Get-Content $DistroToml | Select-String '^pyyaml_version\s*=\s*"([^"]+)"' |
+$PyyamlVersion = Get-Content $DistroToml | Select-String '^[ \t]*pyyaml_version[ \t]*=[ \t]*"([^"]+)"[ \t]*(?:#.*)?$' |
     Select-Object -First 1 | ForEach-Object { $_.Matches[0].Groups[1].Value.Trim() }
+
+# A duplicated key is a merge accident, not a value: reject it loudly rather than
+# let Select-Object -First 1 pick one silently. Mirrors install.sh.
+foreach ($key in @("uv_version", "pyyaml_version")) {
+    $hits = @(Get-Content $DistroToml | Select-String "^[ \t]*${key}[ \t]*=")
+    if ($hits.Count -gt 1) {
+        Write-Error "$key appears $($hits.Count) times in distro.toml (expected exactly one)"
+        exit 1
+    }
+}
 
 # Both versions go straight to uv, so a hand-typed distro.toml should fail here,
 # loudly, rather than somewhere deeper with a bewildering message.
 # A missing key yields AutomationNull, and -notmatch treats a collection as a
 # filter (returning an empty array, which is falsy), so test for null separately -
 # otherwise a missing uv_version slips through with a blank version.
-$VersionPattern = '^\d+(\.\d+)+$'
+# ASCII [0-9] only, matching install.sh: \d would also admit Unicode decimal digits.
+$VersionPattern = '^[0-9]+(\.[0-9]+)+$'
 if ($null -eq $UvVersion -or $UvVersion -notmatch $VersionPattern) {
     Write-Error "Missing or invalid uv_version in distro.toml: '$UvVersion' (expected digits and dots, e.g. 0.10.12)"
     exit 1
 }
 if ($null -eq $PyyamlVersion -or $PyyamlVersion -notmatch $VersionPattern) {
     Write-Error "Missing or invalid pyyaml_version in distro.toml: '$PyyamlVersion' (expected digits and dots, e.g. 6.0.3)"
+    exit 1
+}
+
+# The 3.12 floor is documented in README.md and is real: the pinned PyYAML wheels
+# cover CPython 3.12-3.14 only, so an older interpreter could fall back to a source
+# build. Fail loudly rather than let that happen silently.
+try { $pythonVersion = [version]$Python } catch {
+    Write-Error "Invalid -Python '$Python' (expected a version like 3.14)"
+    exit 1
+}
+if ($pythonVersion -lt [version]"3.12") {
+    Write-Error "Python $Python is below the supported floor of 3.12"
     exit 1
 }
 
@@ -97,11 +120,18 @@ if (($currentVer -eq $UvVersion) -and (Test-Path $UvxExe)) {
     New-Item -ItemType Directory -Force -Path $Prefix | Out-Null
     $tmp    = [IO.Path]::Combine([IO.Path]::GetTempPath(), [IO.Path]::ChangeExtension([IO.Path]::GetRandomFileName(), ".zip"))
     $tmpDir = "$tmp.dir"
-    $tomlMatch    = Get-Content (Join-Path $ScriptDir "distro.toml") |
-                        Select-String "^${arch}-pc-windows-msvc\s*=\s*`"([^`"]+)`""
+    # Guard before indexing: under Set-StrictMode plus $ErrorActionPreference = "Stop"
+    # a null property access throws terminators, so the diagnostic below would never run.
+    $tomlMatch = Get-Content (Join-Path $ScriptDir "distro.toml") |
+                    Select-String "^${arch}-pc-windows-msvc\s*=\s*`"([^`"]+)`"" |
+                    Select-Object -First 1
+    if ($null -eq $tomlMatch) {
+        Write-Error "No pinned checksum for ${arch}-pc-windows-msvc in distro.toml"
+        exit 1
+    }
     $expectedHash = $tomlMatch.Matches[0].Groups[1].Value.ToUpper()
     if (-not $expectedHash) {
-        Write-Error "No pinned checksum for ${arch}-pc-windows-msvc in distro.toml"
+        Write-Error "Pinned checksum for ${arch}-pc-windows-msvc is empty in distro.toml"
         exit 1
     }
     try {
@@ -162,14 +192,28 @@ if (Test-Path $VenvPy) {
 # so relax the preference for the probe alone and restore it straight away.
 $savedEap = $ErrorActionPreference
 $ErrorActionPreference = "Continue"
-& $VenvPy -c "import sys, yaml; sys.exit(0 if yaml.__version__ == sys.argv[1] else 1)" $PyyamlVersion 2>$null
+# Reset first: a venv whose python.exe exists but cannot launch leaves a stale
+# $LASTEXITCODE (from the successful uv call above) that would read as success and
+# skip the install - failing unsafe. -I keeps a stray yaml.py in the working
+# directory or on PYTHONPATH from masquerading as the pinned package.
+$LASTEXITCODE = $null
+& $VenvPy -I -c "import sys, yaml; sys.exit(0 if yaml.__version__ == sys.argv[1] else 1)" $PyyamlVersion 2>$null
 $ErrorActionPreference = $savedEap
 
 if ($LASTEXITCODE -eq 0) {
     Write-Msg "  ✓ pyyaml $PyyamlVersion"
 } else {
     Write-Msg "  → Installing pyyaml $PyyamlVersion"
-    $pipArgs = @("pip", "install", "--python", $VenvPy, "pyyaml==$PyyamlVersion")
+    # --exclude-newer P0D neutralises any inherited UV_EXCLUDE_NEWER (a shell that has
+    # sourced env.ps1 exports P1D, which would otherwise filter out the pinned wheel);
+    # --no-config --default-index pins the index so uv.toml or UV_DEFAULT_INDEX cannot
+    # redirect the download; --only-binary fails closed if no wheel matches.
+    # Note: this script passes --python as an interpreter path (correct for Windows venvs),
+    # deliberately different from the bash script's directory form.
+    $pipArgs = @("pip", "install", "--python", $VenvPy,
+                 "--exclude-newer", "P0D",
+                 "--no-config", "--default-index", "https://pypi.org/simple",
+                 "--only-binary", ":all:", "pyyaml==$PyyamlVersion")
     if ($Quiet) { $pipArgs += "--quiet" }
     & $UvExe @pipArgs
     if ($LASTEXITCODE -ne 0) {

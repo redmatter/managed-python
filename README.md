@@ -148,7 +148,7 @@ The cooldown is a default, not a cage. A command-line flag beats the env var:
 | `uvx` / `uv tool install` resolution | Yes |
 | Existing `uv.lock` installs | No - `uv lock` records the resolved `exclude-newer` timestamp (and its `exclude-newer-span`) into the lockfile, and `uv sync` honours that until you pass `--upgrade` or `--refresh`. This mirrors the `npm ci` and pinned-`requirements.txt` caveat in the AWS post |
 | Managed Python interpreter downloads (`uv python install`) | No - `exclude-newer` applies to package resolution only |
-| The pinned PyYAML installed during bootstrap | No - it is an exact pin to an immutable release, so the cooldown has nothing to add. An exact pin is its own control; a cooldown only governs unpinned resolution. See [SECURITY.md](SECURITY.md#pinned-bootstrap-dependency) |
+| The pinned PyYAML installed during bootstrap | Deliberately disabled - the bootstrap passes `--exclude-newer P0D` for that one install, because the exact pin to an immutable release is the control there, not the cooldown. The pin fixes **which version** is selected; the cooldown filters by **upload time** and would otherwise apply to a pin too. See [SECURITY.md](SECURITY.md#pinned-bootstrap-dependency) |
 | A `pip` inside your own project venvs | No - `pip` has its own `global.uploaded-prior-to` setting. The managed venv contains no `pip` |
 
 > [!IMPORTANT]
@@ -180,6 +180,11 @@ exec "$PYTHON" script.py
 > [!TIP]
 > **PyYAML ships with the managed venv.** `import yaml` just works in `"$REDMATTER_PYTHON"` - no
 > `--with pyyaml`, no install step. Reach for it and keep your one-liners terse.
+>
+> The wheel is fetched from PyPI only: the bootstrap pins the index (`--default-index
+> https://pypi.org/simple`) and ignores project config (`--no-config`), so the fetch cannot be
+> redirected. The "no hash verification" residual risk in
+> [SECURITY.md](SECURITY.md#pinned-bootstrap-dependency) is the only remaining gap.
 
 ## Layout After Install
 

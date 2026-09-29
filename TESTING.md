@@ -63,6 +63,7 @@ cat /tmp/mp-test/env.sh
 
 - `✓ uv X.Y.Z` (skipped, already current)
 - `✓ venv already exists` (skipped)
+- `✓ pyyaml 6.0.3` (skipped, already at the pin - an idempotent run must not reinstall)
 - env files regenerated cleanly
 
 ### Test 4 — PyYAML installed at the pinned version
@@ -86,31 +87,32 @@ source /tmp/mp-test/env.sh && "$TEST_PYTHON" -c 'import yaml; print(yaml.safe_lo
 
 ### Test 5 — PyYAML is idempotent and self-heals version drift
 
-A re-run must not reinstall, and a drifted venv must be brought back to the pin rather than left
-alone.
+A re-run must not reinstall, and a venv that has lost the pin must be brought back to it rather
+than left alone.
 
-> [!CAUTION]
-> **Downgrade to 6.0.2, deliberately.** No PyYAML release before `6.0.3` ships a Windows ARM64
-> wheel or a CPython 3.14 wheel, so the drift target is not arbitrary: it exercises the case the
-> pin exists to prevent, and it is why Python 3.12 is the supported floor.
+> [!NOTE]
+> Drift is induced by **uninstalling** PyYAML, not by downgrading the pin: an uninstall fetches no
+> wheel and needs no compiler, so this test keeps working on a host with no build toolchain.
 
 ```bash
 # Re-run: must skip
 ./install.sh --prefix /tmp/mp-test --python 3.14 --env-prefix TEST --isolated
 
-# Drift the venv, then re-run: must restore the pin
-/tmp/mp-test/uv pip install --python /tmp/mp-test/venv "pyyaml==6.0.2" -q
-/tmp/mp-test/venv/bin/python -c 'import yaml; print("drifted to", yaml.__version__)'
+# Drift the venv by uninstalling pyyaml, then re-run: must restore the pin.
+# No network fetch, no wheel, no compiler - uv simply removes the package.
+/tmp/mp-test/uv pip uninstall --python /tmp/mp-test/venv pyyaml
+/tmp/mp-test/venv/bin/python -c 'import yaml' || echo "probe fails: yaml is gone"
 ./install.sh --prefix /tmp/mp-test --python 3.14 --env-prefix TEST --isolated
-/tmp/mp-test/venv/bin/python -c 'import yaml; print("restored to", yaml.__version__)'
+/tmp/mp-test/venv/bin/python -c 'import yaml; print("✓ pyyaml", yaml.__version__)'
 ```
 
 **Expect:**
 
 - The re-run prints `✓ pyyaml 6.0.3` (skipped)
-- After the downgrade the venv reports `drifted to 6.0.2`
+- After the uninstall the probe fails (`import yaml` errors, so the line prints
+  `probe fails: yaml is gone`)
 - The final install prints `→ Installing pyyaml 6.0.3` then
-  `✓ pyyaml 6.0.3 installed`, and the venv reports `restored to 6.0.3`
+  `✓ pyyaml 6.0.3 installed`, and the venv prints `✓ pyyaml 6.0.3`
 
 ### Test 6 — Old flag rejected
 
@@ -221,6 +223,70 @@ files rewritten.
 A missing `uv` must be caught the same way — that ordering matters, because cooldown validation
 silently no-ops when `uv` cannot be run.
 
+### Test 13 — Strict validation of the pins
+
+`install.sh` rejects a malformed `distro.toml` pin before it can reach the install command. Each
+case below exits `1` with a matching `ERROR:` line. **Restore `distro.toml` between cases and again
+at the end** - the file lives in the repository, so a forgotten hand-edit will be committed by
+mistake.
+
+Watch both pins. The two keys share one shape rule, so prove each one independently.
+
+```bash
+# (a) clause removed entirely: edit distro.toml, delete the whole `uv_version` line
+git checkout -- distro.toml   # restore the real pins between cases
+
+# (b) pre-release suffix:   uv_version = "0.10.12-rc1"
+# (c) leading dash:         uv_version = "-0.10.12"   (uv would read this as an option)
+# (d) non-numeric value:    uv_version = "six"
+
+# After each hand-edit, run the installer and read the exit code
+./install.sh --prefix /tmp/mp-test --python 3.14 --env-prefix TEST; echo "exit=$?"
+```
+
+Hand-editing rather than scripting the change is deliberate: it is the case the guard exists for,
+and it keeps the patch portable across GNU sed and BSD sed.
+
+Repeat (a) to (d), each time editing `pyyaml_version` instead of `uv_version`, and expect the same
+list of failures against `pyyaml_version`.
+
+**Expect (per case):** exit `1`, and
+
+- (a) `ERROR: <key> is missing in <dir>/distro.toml`
+- (b), (c), (d) `ERROR: <key> '<value>' in <dir>/distro.toml is not a valid version`
+
+where `<key>` is `uv_version` or `pyyaml_version` and `<dir>` is the directory holding the scripts.
+**Restore `distro.toml` (`git checkout -- distro.toml`) after the last case.**
+
+### Test 14 — Python below the supported floor is rejected
+
+Internal tooling requires 3.12 or newer, so anything older must fail before a venv is created.
+
+```bash
+./install.sh --prefix /tmp/mp-test --python 3.10 --env-prefix TEST; echo "exit=$?"
+```
+
+**Expect:** exit `1` with `ERROR: --python 3.10 is below the supported floor of 3.12`, and no
+`venv/`, `env.sh`, or `distro.toml` written to the prefix. An older-but-valid value such as `3.11`
+must hit the same floor error, so the check is a real comparison and not a string match on `3.10`.
+
+### Test 15 — PyYAML install is immune to an inherited cooldown
+
+The bootstrap pin is installed with a forced `--exclude-newer P0D`, so a cooldown already exported
+into the shell - exactly what sourcing `env.sh` does - cannot filter the pinned wheel out. This is
+the regression guard for that fix.
+
+```bash
+rm -rf /tmp/mp-test
+UV_EXCLUDE_NEWER=2025-01-01 ./install.sh --prefix /tmp/mp-test --python 3.14 --env-prefix TEST --isolated
+/tmp/mp-test/venv/bin/python -c 'import yaml; print(yaml.__version__)'
+```
+
+**Expect:** the install still reports `→ Installing pyyaml 6.0.3` then `✓ pyyaml 6.0.3 installed`,
+and the venv prints `6.0.3`. Confirm the guard is doing real work by dropping the override: the
+same install without `--exclude-newer P0D` fails with an unsatisfiable requirement, because
+`2025-01-01` predates the `6.0.3` upload and `--only-binary` refuses the sdist fallback.
+
 ---
 
 ## Windows (PowerShell)
@@ -264,7 +330,8 @@ Get-Content C:\Users\Quickemu\temp\mp-test\env.ps1
   -UvEnv "TEST_UV" -UvxEnv "TEST_UVX" -PythonEnv "TEST_PYTHON" -Isolated
 ```
 
-**Expect:** uv and venv skipped; env files regenerated.
+**Expect:** `✓ uv X.Y.Z`, `✓ venv already exists` and `✓ pyyaml 6.0.3` (skipped, already at the
+pin); env files regenerated.
 
 ### Windows: Test 4 — PyYAML installed at the pinned version
 
@@ -278,21 +345,27 @@ Remove-Item -Recurse -Force C:\Users\Quickemu\temp\mp-test
 
 ### Windows: Test 5 — PyYAML is idempotent and self-heals version drift
 
+> [!NOTE]
+> Same rule as the Linux [Test 5](#test-5--pyyaml-is-idempotent-and-self-heals-version-drift): drift
+> is induced by **uninstalling** PyYAML, not by downgrading the pin, so the step needs no wheel and
+> no compiler.
+
 ```powershell
 # Re-run: must skip
 .\install.ps1 -Prefix "C:\Users\Quickemu\temp\mp-test" -Python "3.14" -EnvPrefix "TEST" -Isolated
 
-# Drift the venv, then re-run: must restore the pin
-& "C:\Users\Quickemu\temp\mp-test\uv.exe" pip install `
-  --python "C:\Users\Quickemu\temp\mp-test\venv\Scripts\python.exe" "pyyaml==6.0.2" -q
-& "C:\Users\Quickemu\temp\mp-test\venv\Scripts\python.exe" -c "import yaml; print('drifted to', yaml.__version__)"
+# Drift the venv by uninstalling pyyaml, then re-run: must restore the pin.
+# No network fetch, no wheel, no compiler - uv simply removes the package.
+& "C:\Users\Quickemu\temp\mp-test\uv.exe" pip uninstall `
+  --python "C:\Users\Quickemu\temp\mp-test\venv\Scripts\python.exe" pyyaml
+& "C:\Users\Quickemu\temp\mp-test\venv\Scripts\python.exe" -c "import yaml" 2>&1 | Out-Null; if ($LASTEXITCODE -ne 0) { "probe fails: yaml is gone" }
 .\install.ps1 -Prefix "C:\Users\Quickemu\temp\mp-test" -Python "3.14" -EnvPrefix "TEST" -Isolated
-& "C:\Users\Quickemu\temp\mp-test\venv\Scripts\python.exe" -c "import yaml; print('restored to', yaml.__version__)"
+& "C:\Users\Quickemu\temp\mp-test\venv\Scripts\python.exe" -c "import yaml; print('pyyaml', yaml.__version__)"
 ```
 
-**Expect:** the re-run prints `✓ pyyaml 6.0.3`; the final install prints
-`→ Installing pyyaml 6.0.3` then `✓ pyyaml 6.0.3 installed`, with the venv reporting
-`restored to 6.0.3`.
+**Expect:** the re-run prints `✓ pyyaml 6.0.3`; after the uninstall the probe fails (the line
+prints `probe fails: yaml is gone`); the final install prints `→ Installing pyyaml 6.0.3` then
+`✓ pyyaml 6.0.3 installed`, with the interpreter printing `pyyaml 6.0.3`.
 
 ### Windows: Test 6 — PyYAML installed for a Windows ARM64 interpreter
 
@@ -344,6 +417,63 @@ Remove-Item C:\Users\Quickemu\temp\mp-test\uvx.exe, C:\Users\Quickemu\temp\mp-te
 
 **Expect:** `→ Downloading uv X.Y.Z` rather than `✓ uv X.Y.Z`, `✓ venv already exists`, and
 `uvx --version` prints a version. Re-running on the restored prefix must skip the download again.
+
+### Windows: Test 10 — Strict validation of the pins
+
+The Windows half of the Linux [Test 13](#test-13--strict-validation-of-the-pins). `install.ps1`
+reads both pins from `distro.toml` and rejects a malformed one up front. **Restore `distro.toml`
+between cases and again at the end** - a forgotten hand-edit would be committed by mistake.
+
+One wording note: unlike `install.sh`, PowerShell folds every bad shape into a single message, so
+(a) to (d) all report `Missing or invalid <key> ...` rather than a separate "not a valid version"
+line.
+
+```powershell
+# Edit distro.toml by hand between cases, then run the installer and read the exit code:
+#   (a) delete the whole `uv_version` line
+#   (b) uv_version = "0.10.12-rc1"   (pre-release suffix)
+#   (c) uv_version = "-0.10.12"      (leading dash - uv would read this as an option)
+#   (d) uv_version = "six"           (non-numeric)
+.\install.ps1 -Prefix "C:\Users\Quickemu\temp\mp-test" -Python "3.14" -EnvPrefix "TEST"
+"exit=$LASTEXITCODE"
+git checkout -- distro.toml   # restore the real pins between cases
+```
+
+Repeat (a) to (d), each time editing `pyyaml_version` instead of `uv_version`, and expect the same
+failures against `pyyaml_version`.
+
+**Expect (per case):** exit `1`, and `Missing or invalid <key> in distro.toml: '<value>' (expected
+digits and dots, ...)`, where `<key>` is `uv_version` or `pyyaml_version`. Case (a) shows an empty
+`''` value; (b), (c) and (d) echo the offending value back.
+**Restore `distro.toml` (`git checkout -- distro.toml`) after the last case.**
+
+### Windows: Test 11 — Python below the supported floor is rejected
+
+```powershell
+.\install.ps1 -Prefix "C:\Users\Quickemu\temp\mp-test" -Python "3.10" -EnvPrefix "TEST"
+"exit=$LASTEXITCODE"
+```
+
+**Expect:** exit `1` with `Python 3.10 is below the supported floor of 3.12`, and no `venv\`,
+`env.ps1`, or `distro.toml` written to the prefix.
+
+### Windows: Test 12 — PyYAML install is immune to an inherited cooldown
+
+The Windows half of the Linux [Test 15](#test-15--pyyaml-install-is-immune-to-an-inherited-cooldown).
+The bootstrap pin is installed with a forced `--exclude-newer P0D`, so a cooldown already in the
+environment - exactly what sourcing `env.ps1` leaves behind - cannot filter the pinned wheel out.
+
+```powershell
+Remove-Item -Recurse -Force C:\Users\Quickemu\temp\mp-test
+$env:UV_EXCLUDE_NEWER = "2025-01-01"
+.\install.ps1 -Prefix "C:\Users\Quickemu\temp\mp-test" -Python "3.14" -EnvPrefix "TEST" -Isolated
+Remove-Item Env:\UV_EXCLUDE_NEWER
+& "C:\Users\Quickemu\temp\mp-test\venv\Scripts\python.exe" -c "import yaml; print(yaml.__version__)"
+```
+
+**Expect:** the install still reports `→ Installing pyyaml 6.0.3` then `✓ pyyaml 6.0.3 installed`,
+and the interpreter prints `6.0.3`. Clean up with `Remove-Item Env:\UV_EXCLUDE_NEWER` so the
+cooldown does not leak into later tests.
 
 ---
 

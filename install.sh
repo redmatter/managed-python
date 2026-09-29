@@ -5,7 +5,7 @@
 #   ./install.sh --prefix PATH --python X.Y --uv-env NAME --python-env NAME \
 #                [--cooldown DURATION] [--isolated] [--shell-profile]
 #
-# Bootstrap phase (this script): download uv, create venv.
+# Bootstrap phase (this script): download uv, create venv, install the pinned pyyaml.
 # Configuration phase (setup.py): env.sh, env.ps1, bin/ wrappers, shell profile.
 
 _msg() { [ "${quiet:-}" != "1" ] && printf "%s\n" "$1"; return 0; }
@@ -44,6 +44,8 @@ _uv_expected_hash() {
 # returned verbatim, so the caller's own validation is the only thing deciding
 # what is acceptable. The `|| true` keeps `set -e` plus `pipefail` from aborting
 # the caller on absent or unreadable input, leaving its diagnostic free to fire.
+# A duplicated key therefore comes back as a multi-line value; `main` rejects that
+# outright by counting matches first, and install.ps1 mirrors the same check.
 _distro_value() {
     local distro_toml="$1" key="$2"
     sed -nE 's/^[[:space:]]*'"${key}"'[[:space:]]*=[[:space:]]*"([^"]+)"[[:space:]]*(#.*)?$/\1/p' \
@@ -70,7 +72,11 @@ _bootstrap_uv() {
     target="$(basename "$url" .tar.gz)"
     target="${target#uv-}"
     tmp="$(mktemp -d)"
-    trap 'rm -rf "$tmp"; trap - RETURN' RETURN
+    # An EXIT trap, not RETURN: RETURN never fires when a later guard calls
+    # `exit 1`, so the downloaded archive would be left behind in TMPDIR on
+    # every failure path. On success the archive has already been copied out of
+    # $tmp, so removing it at script exit is correct and harmless.
+    trap 'rm -rf "$tmp"' EXIT
 
     if command -v curl &>/dev/null; then
         curl -fsSL "$url" -o "${tmp}/uv.tar.gz" \
@@ -149,12 +155,30 @@ _bootstrap_packages() {
     fi
 
     local venv_py="${prefix}/venv/bin/python"
-    if [[ -x "$venv_py" ]] && "$venv_py" -c "import sys, yaml; sys.exit(0 if yaml.__version__ == sys.argv[1] else 1)" "$pyyaml_version" &>/dev/null; then
+    # `-I` (isolated mode) matters here: without it a stray yaml.py in the
+    # working directory or on PYTHONPATH could answer for the pinned package,
+    # and the probe would wrongly report the venv already satisfied.
+    if [[ -x "$venv_py" ]] && "$venv_py" -I -c "import sys, yaml; sys.exit(0 if yaml.__version__ == sys.argv[1] else 1)" "$pyyaml_version" &>/dev/null; then
         _msg "  ✓ pyyaml $pyyaml_version"; return
     fi
 
     _msg "  → Installing pyyaml $pyyaml_version"
-    "${prefix}/uv" pip install --python "${prefix}/venv" "pyyaml==${pyyaml_version}" ${quiet:+--quiet} \
+    # Each flag here closes a specific way the bootstrap could hard-fail or
+    # fetch something other than the pinned wheel:
+    #   --exclude-newer P0D      neutralises any inherited UV_EXCLUDE_NEWER
+    #                            (a shell that sourced env.sh exports P1D, which
+    #                            would filter out the pinned wheel entirely)
+    #   --no-config --default-index https://pypi.org/simple
+    #                            pins the index, so a uv.toml in the working
+    #                            directory or UV_DEFAULT_INDEX cannot redirect
+    #                            the download elsewhere
+    #   --only-binary :all:      fails closed when no wheel matches, rather than
+    #                            silently compiling the sdist
+    # `--python "${prefix}/venv"` is deliberate: uv accepts the venv directory as
+    # well as the interpreter path, and TESTING.md clones this exact directory form.
+    "${prefix}/uv" pip install --python "${prefix}/venv" \
+        --exclude-newer P0D --no-config --default-index https://pypi.org/simple --only-binary :all: \
+        "pyyaml==${pyyaml_version}" ${quiet:+--quiet} \
         || { printf "ERROR: Failed to install pyyaml %s\n" "$pyyaml_version" >&2; exit 1; }
     _msg "  ✓ pyyaml $pyyaml_version installed"
 }
@@ -168,6 +192,17 @@ main() {
     local uv_version pyyaml_version
     uv_version="$(_distro_value "${script_dir}/distro.toml" uv_version)"
     pyyaml_version="$(_distro_value "${script_dir}/distro.toml" pyyaml_version)"
+
+    # A duplicated key is a merge accident, not a value: reject it loudly rather
+    # than let one of the two silently win. Fail-fast matches the validation below.
+    local key count
+    for key in uv_version pyyaml_version; do
+        count="$(grep -cE "^[[:space:]]*${key}[[:space:]]*=" "${script_dir}/distro.toml" || true)"
+        if [[ "${count:-0}" -gt 1 ]]; then
+            printf "ERROR: %s appears %s times in %s/distro.toml (expected exactly one)\n" \
+                "$key" "$count" "$script_dir" >&2; exit 1
+        fi
+    done
 
     if [[ -z "$uv_version" ]]; then
         printf "ERROR: uv_version is missing in %s/distro.toml\n" "$script_dir" >&2; exit 1
@@ -209,6 +244,13 @@ main() {
 
     [[ -z "$prefix" ]]     && { printf "ERROR: --prefix is required\n" >&2; exit 1; }
     [[ -z "$min_python" ]] && { printf "ERROR: --python is required\n" >&2; exit 1; }
+
+    # Internal tooling requires 3.12 or newer: the pinned PyYAML wheels cover CPython
+    # 3.12, 3.13 and 3.14 only, so an older interpreter with no matching wheel would
+    # fall back to a source build.
+    if [[ "$(printf '%s\n%s\n' "3.12" "$min_python" | sort -V | head -1)" != "3.12" ]]; then
+        printf "ERROR: --python %s is below the supported floor of 3.12\n" "$min_python" >&2; exit 1
+    fi
 
     _msg ""
     _msg "managed-python bootstrap"

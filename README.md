@@ -12,10 +12,10 @@ Installation is split into two phases:
 
 | Phase | Script | Does |
 |-------|--------|------|
-| Bootstrap | `install.sh` / `install.ps1` | Downloads uv, creates venv |
+| Bootstrap | `install.sh` / `install.ps1` | Downloads uv, creates venv, installs the pinned PyYAML |
 | Configure | `setup.py` (stdlib only) | Writes env files, bin/ wrappers, shell profile |
 
-The shell scripts are intentionally minimal — they exist only because downloading a binary and creating a venv require platform-specific shell syntax. Everything after that runs inside the freshly-created Python venv via `setup.py`, which is pure stdlib and cross-platform.
+The shell scripts are intentionally minimal — they exist only because downloading a binary, creating a venv, and installing the one pinned bootstrap package require platform-specific shell syntax. Everything after that runs inside the freshly-created Python venv via `setup.py`, which is pure stdlib and cross-platform.
 
 ## Installation
 
@@ -40,7 +40,7 @@ Expand-Archive managed-python.zip
 ```bash
 ./install.sh \
   --prefix ~/.local/redmatter/python \
-  --python 3.10 \
+  --python 3.14 \
   --env-prefix REDMATTER
 
 source ~/.local/redmatter/python/env.sh
@@ -51,7 +51,7 @@ source ~/.local/redmatter/python/env.sh
 ```powershell
 .\install.ps1 `
   -Prefix "$env:USERPROFILE\.local\redmatter\python" `
-  -Python "3.10" `
+  -Python "3.14" `
   -EnvPrefix "REDMATTER"
 
 . "$env:USERPROFILE\.local\redmatter\python\env.ps1"
@@ -64,14 +64,14 @@ source ~/.local/redmatter/python/env.sh
 > **PowerShell** — evaluate `env.ps1` as a string (bypasses script execution policy):
 >
 > ```powershell
-> install.bat -Prefix "$env:USERPROFILE\.local\redmatter\python" -Python "3.10" -EnvPrefix "REDMATTER"
+> install.bat -Prefix "$env:USERPROFILE\.local\redmatter\python" -Python "3.14" -EnvPrefix "REDMATTER"
 > Invoke-Expression (Get-Content "$env:USERPROFILE\.local\redmatter\python\env.ps1" -Raw)
 > ```
 >
 > **CMD** — use `call` to load `env.bat` into the current session:
 >
 > ```bat
-> install.bat -Prefix "%USERPROFILE%\.local\redmatter\python" -Python "3.10" -EnvPrefix "REDMATTER"
+> install.bat -Prefix "%USERPROFILE%\.local\redmatter\python" -Python "3.14" -EnvPrefix "REDMATTER"
 > call "%USERPROFILE%\.local\redmatter\python\env.bat"
 > ```
 >
@@ -83,7 +83,7 @@ source ~/.local/redmatter/python/env.sh
 ```bash
 ./install.sh \
   --prefix ~/.local/redmatter/python \
-  --python 3.10 \
+  --python 3.14 \
   --env-prefix REDMATTER \
   --quiet
 
@@ -96,7 +96,7 @@ source ~/.local/redmatter/python/env.sh
 | Flag | Required | Purpose |
 | ------ | ---------- | --------- |
 | `--prefix PATH` | yes | Install location |
-| `--python X.Y` | yes | Python version for venv. Default mode: prefer matching system Python, fall back to uv-managed. Isolated mode: always uv-managed. |
+| `--python X.Y` | yes | Python version for venv. Minimum supported is **3.12**; Atlas installs **3.14**. Default mode: prefer matching system Python, fall back to uv-managed. Isolated mode: always uv-managed. |
 | `--env-prefix NAME` | yes* | Derives `NAME_UV`, `NAME_UVX`, and `NAME_PYTHON` — preferred over the three flags below |
 | `--uv-env NAME` | yes* | Env var name for the uv binary path |
 | `--uvx-env NAME` | yes* | Env var name for the uvx binary path |
@@ -107,6 +107,9 @@ source ~/.local/redmatter/python/env.sh
 | `--quiet` / `-q` | no | Suppress all output except warnings |
 
 \* Use either `--env-prefix` **or** all three of `--uv-env` / `--uvx-env` / `--python-env` — they are mutually exclusive.
+
+> [!NOTE]
+> **Python 3.12 is the minimum supported version.** Internal tooling requires 3.12 or newer, and everyone is expected to use only the managed Python that the Atlas installer provides, which specifies **3.14**. This floor is not arbitrary: the pinned PyYAML wheels cover CPython 3.12, 3.13, and 3.14 on every supported platform, but CPython 3.8-3.11 has no Windows ARM64 wheel, so those older versions would fall back to a source build. Prefer `--python 3.14` in examples and installs.
 
 > [!NOTE]
 > **Choosing a mode:** Use the default on developer machines where a system Python already exists. Use `--isolated` in CI, containers, or shared servers where you need a fully reproducible environment independent of whatever Python is (or isn't) installed on the host.
@@ -120,7 +123,7 @@ This is deliberate, and it follows the guidance in the AWS Security Blog post [S
 `--cooldown` accepts anything uv's `--exclude-newer` accepts: an ISO 8601 duration (`P1D`, `PT12H`, `P2W`), a friendly duration (`3 days`), a date (`2026-01-01`), or an RFC 3339 timestamp. `P0D` turns the cooldown off.
 
 ```bash
-./install.sh --prefix ~/.local/redmatter/python --python 3.10 \
+./install.sh --prefix ~/.local/redmatter/python --python 3.14 \
   --env-prefix REDMATTER --cooldown "3 days"
 ```
 
@@ -145,6 +148,7 @@ The cooldown is a default, not a cage. A command-line flag beats the env var:
 | `uvx` / `uv tool install` resolution | Yes |
 | Existing `uv.lock` installs | No - `uv lock` records the resolved `exclude-newer` timestamp (and its `exclude-newer-span`) into the lockfile, and `uv sync` honours that until you pass `--upgrade` or `--refresh`. This mirrors the `npm ci` and pinned-`requirements.txt` caveat in the AWS post |
 | Managed Python interpreter downloads (`uv python install`) | No - `exclude-newer` applies to package resolution only |
+| The pinned PyYAML installed during bootstrap | Deliberately disabled - the bootstrap passes `--exclude-newer P0D` for that one install, because the exact pin to an immutable release is the control there, not the cooldown. The pin fixes **which version** is selected; the cooldown filters by **upload time** and would otherwise apply to a pin too. See [SECURITY.md](SECURITY.md#pinned-bootstrap-dependency) |
 | A `pip` inside your own project venvs | No - `pip` has its own `global.uploaded-prior-to` setting. The managed venv contains no `pip` |
 
 > [!IMPORTANT]
@@ -155,6 +159,9 @@ The cooldown is a default, not a cage. A command-line flag beats the env var:
 ```bash
 # Run a stdlib script
 "$REDMATTER_PYTHON" /path/to/script.py
+
+# YAML is available directly - no --with, no install step
+"$REDMATTER_PYTHON" -c 'import yaml; print(yaml.__version__)'
 
 # Run a script with dependencies (pyproject.toml in app dir)
 "$REDMATTER_UV" run --project /path/to/app my-script.py
@@ -169,6 +176,15 @@ The cooldown is a default, not a cage. A command-line flag beats the env var:
 PYTHON="${REDMATTER_PYTHON:-python3}"
 exec "$PYTHON" script.py
 ```
+
+> [!TIP]
+> **PyYAML ships with the managed venv.** `import yaml` just works in `"$REDMATTER_PYTHON"` - no
+> `--with pyyaml`, no install step. Reach for it and keep your one-liners terse.
+>
+> The wheel is fetched from PyPI only: the bootstrap pins the index (`--default-index
+> https://pypi.org/simple`) and ignores project config (`--no-config`), so the fetch cannot be
+> redirected. The "no hash verification" residual risk in
+> [SECURITY.md](SECURITY.md#pinned-bootstrap-dependency) is the only remaining gap.
 
 ## Layout After Install
 
@@ -200,10 +216,11 @@ The installed `distro.toml` at `<prefix>/distro.toml` records the options used d
 [distro]
 version = "1.0.0"
 uv_version = "0.10.6"
+pyyaml_version = "6.0.3"
 
 [install]
 prefix       = "/home/user/.local/redmatter/python"
-python       = "3.10"
+python       = "3.14"
 uv_env       = "REDMATTER_UV"
 uvx_env      = "REDMATTER_UVX"
 python_env   = "REDMATTER_PYTHON"
@@ -218,6 +235,7 @@ Re-running `install.sh` with the same args is always safe:
 
 - uv download skipped only if **both** `uv` and `uvx` are present and `uv` matches the pinned version — a missing `uvx` re-downloads the pair, since they ship in one archive
 - venv creation skipped if `venv/bin/python` already works
+- PyYAML install skipped if the venv already reports the pinned `pyyaml_version`; a drifted version self-heals on the next run
 - All generated files (`env.sh`, `env.ps1`, `bin/`, `distro.toml`) are always regenerated (cheap, ensures correctness)
 
 ## Versioning

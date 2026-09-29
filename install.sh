@@ -35,6 +35,18 @@ _uv_expected_hash() {
         | sed -E 's/^[^=]+=[[:space:]]*"([^"]+)".*/\1/'
 }
 
+# Read a quoted key=value out of distro.toml: exact key, optional leading
+# whitespace, optional whitespace around "=", and an optional trailing comment.
+# It deliberately does NOT tidy the value - whatever sits between the quotes is
+# returned verbatim, so the caller's own validation is the only thing deciding
+# what is acceptable. The `|| true` keeps `set -e` from aborting the caller on
+# absent or unreadable input, leaving its diagnostic free to fire.
+_distro_value() {
+    local distro_toml="$1" key="$2"
+    sed -nE 's/^[[:space:]]*'"${key}"'[[:space:]]*=[[:space:]]*"([^"]+)"[[:space:]]*(#.*)?$/\1/p' \
+        "$distro_toml" || true
+}
+
 _bootstrap_uv() {
     local prefix="$1" uv_version="$2" distro_toml="$3"
     local uv_bin="${prefix}/uv"
@@ -118,9 +130,19 @@ _bootstrap_venv() {
     _msg "  ✓ venv created"
 }
 
+# Pre-install the pinned pyyaml into the venv, so the venv is useful before
+# setup.py runs. Parameters: $1 = install prefix, $2 = pinned version (empty
+# disables this step entirely). Returns 0 when already satisfied, installs via
+# uv otherwise; exits 1 if the install fails, since a half-provisioned venv is
+# not a state we want to hand off to setup.py.
 _bootstrap_packages() {
     local prefix="$1" pyyaml_version="$2"
-    [[ -z "$pyyaml_version" ]] && return 0
+    # An explicit if-block, not a trailing `&&`: a bare `[[ ]] && return 0` is
+    # fine here only while it is not the last statement, and that is a trap for
+    # whoever adds a line below it later.
+    if [[ -z "$pyyaml_version" ]]; then
+        return 0
+    fi
 
     local venv_py="${prefix}/venv/bin/python"
     if [[ -x "$venv_py" ]] && "$venv_py" -c "import sys, yaml; sys.exit(0 if yaml.__version__ == sys.argv[1] else 1)" "$pyyaml_version" &>/dev/null; then
@@ -139,15 +161,27 @@ main() {
     local script_dir
     script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-    local uv_version
-    uv_version="$(grep '^uv_version' "${script_dir}/distro.toml" \
-        | sed -E 's/^[^=]+=[[:space:]]*"?([^"#]+)"?.*/\1/' | tr -d '[:space:]')"
+    local uv_version pyyaml_version
+    uv_version="$(_distro_value "${script_dir}/distro.toml" uv_version)"
+    pyyaml_version="$(_distro_value "${script_dir}/distro.toml" pyyaml_version)"
 
-    local pyyaml_version
-    pyyaml_version="$(grep '^pyyaml_version' "${script_dir}/distro.toml" \
-        | sed -E 's/^[^=]+=[[:space:]]*"?([^"#]+)"?.*/\1/' | tr -d '[:space:]')"
+    if [[ -z "$uv_version" ]]; then
+        printf "ERROR: uv_version is missing in %s/distro.toml\n" "$script_dir" >&2; exit 1
+    fi
     if [[ -z "$pyyaml_version" ]]; then
         printf "ERROR: pyyaml_version is missing in %s/distro.toml\n" "$script_dir" >&2; exit 1
+    fi
+
+    # Reject anything that is not a plain digits-and-dots version. The value is
+    # interpolated into a package specifier, so a stray comment or a leading "-"
+    # (which uv would read as an option) must never reach the install command.
+    if [[ ! "$uv_version" =~ ^[0-9]+(\.[0-9]+)+$ ]]; then
+        printf "ERROR: uv_version %q in %s/distro.toml is not a valid version\n" \
+            "$uv_version" "$script_dir" >&2; exit 1
+    fi
+    if [[ ! "$pyyaml_version" =~ ^[0-9]+(\.[0-9]+)+$ ]]; then
+        printf "ERROR: pyyaml_version %q in %s/distro.toml is not a valid version\n" \
+            "$pyyaml_version" "$script_dir" >&2; exit 1
     fi
 
     # Extract --prefix, --python, --isolated, and --quiet for bootstrap (all flags forwarded to setup.py)

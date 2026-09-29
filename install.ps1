@@ -56,15 +56,26 @@ $UvExe      = Join-Path $Prefix "uv.exe"
 $UvxExe     = Join-Path $Prefix "uvx.exe"
 $VenvPy     = Join-Path $Prefix "venv\Scripts\python.exe"
 
-# Read pinned uv version from distro.toml
-$UvVersion = (Get-Content $DistroToml |
-    Select-String '^uv_version').Line `
-    -replace '^[^=]+=\s*"?([^"#]+)"?.*', '$1' |
-    ForEach-Object { $_.Trim() }
+# Read pinned versions from distro.toml. Select-Object -First 1 keeps each result a
+# single string, so a duplicated line cannot quietly become a two-element array.
+$UvVersion = Get-Content $DistroToml | Select-String '^uv_version\s*=\s*"?([^"#]+)"?' |
+    Select-Object -First 1 | ForEach-Object { $_.Matches[0].Groups[1].Value.Trim() }
 
-$PyyamlVersion = Get-Content $DistroToml | Select-String '^pyyaml_version\s*=\s*"([^"]+)"' | ForEach-Object { $_.Matches.Groups[1].Value }
-if (-not $PyyamlVersion) {
-    Write-Error "No pinned pyyaml_version in distro.toml"
+$PyyamlVersion = Get-Content $DistroToml | Select-String '^pyyaml_version\s*=\s*"([^"]+)"' |
+    Select-Object -First 1 | ForEach-Object { $_.Matches[0].Groups[1].Value.Trim() }
+
+# Both versions go straight to uv, so a hand-typed distro.toml should fail here,
+# loudly, rather than somewhere deeper with a bewildering message.
+# A missing key yields AutomationNull, and -notmatch treats a collection as a
+# filter (returning an empty array, which is falsy), so test for null separately -
+# otherwise a missing uv_version slips through with a blank version.
+$VersionPattern = '^\d+(\.\d+)+$'
+if ($null -eq $UvVersion -or $UvVersion -notmatch $VersionPattern) {
+    Write-Error "Missing or invalid uv_version in distro.toml: '$UvVersion' (expected digits and dots, e.g. 0.10.12)"
+    exit 1
+}
+if ($null -eq $PyyamlVersion -or $PyyamlVersion -notmatch $VersionPattern) {
+    Write-Error "Missing or invalid pyyaml_version in distro.toml: '$PyyamlVersion' (expected digits and dots, e.g. 6.0.3)"
     exit 1
 }
 
@@ -144,21 +155,28 @@ if (Test-Path $VenvPy) {
     Write-Msg "  ✓ venv created"
 }
 
-if ($PyyamlVersion) {
-    & $VenvPy -c "import sys, yaml; sys.exit(0 if yaml.__version__ == sys.argv[1] else 1)" $PyyamlVersion 2>$null
-    if ($LASTEXITCODE -eq 0) {
-        Write-Msg "  ✓ pyyaml $PyyamlVersion"
-    } else {
-        Write-Msg "  → Installing pyyaml $PyyamlVersion"
-        $pipArgs = @("pip", "install", "--python", $VenvPy, "pyyaml==$PyyamlVersion")
-        if ($Quiet) { $pipArgs += "--quiet" }
-        & $UvExe @pipArgs
-        if ($LASTEXITCODE -ne 0) {
-            Write-Error "Failed to install pyyaml $PyyamlVersion"
-            exit $LASTEXITCODE
-        }
-        Write-Msg "  ✓ pyyaml $PyyamlVersion installed"
+# Probe for pyyaml, then install only if the pinned version is missing.
+# The probe exits non-zero (and writes a traceback to stderr) on a fresh venv, which
+# is exactly the case we want to install. Under Windows PowerShell 5.1 a redirected
+# native stderr line is escalated to a terminating error by $ErrorActionPreference,
+# so relax the preference for the probe alone and restore it straight away.
+$savedEap = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+& $VenvPy -c "import sys, yaml; sys.exit(0 if yaml.__version__ == sys.argv[1] else 1)" $PyyamlVersion 2>$null
+$ErrorActionPreference = $savedEap
+
+if ($LASTEXITCODE -eq 0) {
+    Write-Msg "  ✓ pyyaml $PyyamlVersion"
+} else {
+    Write-Msg "  → Installing pyyaml $PyyamlVersion"
+    $pipArgs = @("pip", "install", "--python", $VenvPy, "pyyaml==$PyyamlVersion")
+    if ($Quiet) { $pipArgs += "--quiet" }
+    & $UvExe @pipArgs
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Failed to install pyyaml $PyyamlVersion"
+        exit $LASTEXITCODE
     }
+    Write-Msg "  ✓ pyyaml $PyyamlVersion installed"
 }
 
 Write-Msg ""

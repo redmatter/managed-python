@@ -31,16 +31,19 @@ _uv_download_url() {
 
 _uv_expected_hash() {
     local distro_toml="$1" target="$2"
+    # The trailing `|| true` is load-bearing: under `set -e` plus `pipefail` a
+    # non-zero grep (target absent) would otherwise abort the caller before it
+    # can print its diagnostic, so the caller's own guard is the authority.
     grep "^${target}" "$distro_toml" \
-        | sed -E 's/^[^=]+=[[:space:]]*"([^"]+)".*/\1/'
+        | sed -E 's/^[^=]+=[[:space:]]*"([^"]+)".*/\1/' || true
 }
 
 # Read a quoted key=value out of distro.toml: exact key, optional leading
 # whitespace, optional whitespace around "=", and an optional trailing comment.
 # It deliberately does NOT tidy the value - whatever sits between the quotes is
 # returned verbatim, so the caller's own validation is the only thing deciding
-# what is acceptable. The `|| true` keeps `set -e` from aborting the caller on
-# absent or unreadable input, leaving its diagnostic free to fire.
+# what is acceptable. The `|| true` keeps `set -e` plus `pipefail` from aborting
+# the caller on absent or unreadable input, leaving its diagnostic free to fire.
 _distro_value() {
     local distro_toml="$1" key="$2"
     sed -nE 's/^[[:space:]]*'"${key}"'[[:space:]]*=[[:space:]]*"([^"]+)"[[:space:]]*(#.*)?$/\1/p' \
@@ -132,9 +135,10 @@ _bootstrap_venv() {
 
 # Pre-install the pinned pyyaml into the venv, so the venv is useful before
 # setup.py runs. Parameters: $1 = install prefix, $2 = pinned version (empty
-# disables this step entirely). Returns 0 when already satisfied, installs via
-# uv otherwise; exits 1 if the install fails, since a half-provisioned venv is
-# not a state we want to hand off to setup.py.
+# skips this step; main already rejects an empty pin, so this is belt-and-braces
+# for any other caller). Returns 0 when already satisfied, installs via uv
+# otherwise; exits 1 if the install fails, since a half-provisioned venv is not
+# a state we want to hand off to setup.py.
 _bootstrap_packages() {
     local prefix="$1" pyyaml_version="$2"
     # An explicit if-block, not a trailing `&&`: a bare `[[ ]] && return 0` is
@@ -173,8 +177,9 @@ main() {
     fi
 
     # Reject anything that is not a plain digits-and-dots version. The value is
-    # interpolated into a package specifier, so a stray comment or a leading "-"
-    # (which uv would read as an option) must never reach the install command.
+    # interpolated into a package specifier, so a malformed hand-edit - a
+    # pre-release suffix, or a leading "-" that uv would read as an option -
+    # must never reach the install command.
     if [[ ! "$uv_version" =~ ^[0-9]+(\.[0-9]+)+$ ]]; then
         printf "ERROR: uv_version %q in %s/distro.toml is not a valid version\n" \
             "$uv_version" "$script_dir" >&2; exit 1

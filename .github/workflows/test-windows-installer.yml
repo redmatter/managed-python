@@ -11,6 +11,13 @@ name: Test Windows Installer
 # bug made the "already installed, skip the download" branch unreachable on
 # Windows, so every re-run silently re-downloaded uv. Nothing in CI could catch
 # that, which is why this job exists.
+#
+# Shell coverage, and why there is no matrix here: a `shell:` field cannot be
+# driven from a strategy matrix (GitHub rejects the workflow with "Unrecognized
+# named-value: 'matrix'"), so the two shells are separate steps. PowerShell 7 runs
+# install.ps1 directly. Windows PowerShell 5.1 runs it through install.bat, which
+# is the documented fallback for machines where script execution is blocked and is
+# itself a `powershell -ExecutionPolicy Bypass` wrapper, so it exercises 5.1 too.
 on:
   workflow_dispatch:
     inputs:
@@ -36,31 +43,28 @@ permissions:
 # exists to prove a *fresh* install works and that the second run correctly skips.
 jobs:
   install:
-    name: Install on Windows ${{ inputs.arch }} under ${{ matrix.shell }}
+    name: Install on Windows ${{ inputs.arch }}
     # The self-hosted fleet is Alma Linux and Ubuntu only, so there is no Windows
     # runner to use, and this job is nothing but Windows-only behaviour: the arch
     # selection in install.ps1, the .zip release asset, and Windows PowerShell 5.1,
     # which is the shell install.bat invokes.
     # RUNNER-EXCEPTION: no Windows runner exists on the self-hosted fleet (cicd-github-actions 1.3)
     runs-on: ${{ inputs.arch == 'arm64' && 'windows-11-arm' || 'windows-latest' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        shell: [powershell, pwsh]
+    defaults:
+      run:
+        shell: pwsh
     steps:
       - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.ref || github.ref }}
 
-      - name: Report the interpreter and architecture under test
-        shell: ${{ matrix.shell }}
+      - name: Report the interpreters and architecture under test
         run: |
-          Write-Host "PowerShell : $($PSVersionTable.PSVersion)"
-          Write-Host "PSEdition  : $($PSVersionTable.PSEdition)"
+          Write-Host "pwsh       : $($PSVersionTable.PSVersion)"
+          Write-Host "powershell : $(powershell -NoProfile -Command '$PSVersionTable.PSVersion')"
           Write-Host "PROCESSOR  : $env:PROCESSOR_ARCHITECTURE"
 
       - name: Read the pinned uv version from distro.toml
-        shell: ${{ matrix.shell }}
         run: |
           $line = Select-String -Path distro.toml -Pattern '^uv_version\s*=\s*"([^"]+)"' | Select-Object -First 1
           if ($null -eq $line) { throw "no uv_version line found in distro.toml" }
@@ -70,36 +74,41 @@ jobs:
           # Out-File -Encoding utf8, and a BOM corrupts the GITHUB_ENV variable name.
           Add-Content -Path $env:GITHUB_ENV -Value "UV_PIN=$pin"
 
-      - name: First install
-        shell: ${{ matrix.shell }}
-        run: ./install.ps1 -Prefix "$env:RUNNER_TEMP\mp" -Python 3.14 -EnvPrefix MPWINTEST -Isolated
+      - name: PowerShell 7 - first install
+        run: ./install.ps1 -Prefix "$env:RUNNER_TEMP\mp-pwsh" -Python 3.14 -EnvPrefix MPWINTESTPW -Isolated
 
-      - name: Assert the pinned uv and its uvx twin are installed
-        shell: ${{ matrix.shell }}
+      - name: PowerShell 7 - assert the pinned uv and its uvx twin are installed
         run: |
-          $uv = "$env:RUNNER_TEMP\mp\uv.exe"
+          $uv = "$env:RUNNER_TEMP\mp-pwsh\uv.exe"
           if (-not (Test-Path $uv)) { throw "uv.exe was not installed" }
-          if (-not (Test-Path "$env:RUNNER_TEMP\mp\uvx.exe")) { throw "uvx.exe was not installed" }
+          if (-not (Test-Path "$env:RUNNER_TEMP\mp-pwsh\uvx.exe")) { throw "uvx.exe was not installed" }
           $actual = (& $uv --version 2>$null) -replace '^uv\s+(\S+).*', '$1'
           if ($actual -ne $env:UV_PIN) { throw "uv reports '$actual' but distro.toml pins '$env:UV_PIN'" }
 
-      - name: Second install must skip rather than re-download
-        shell: ${{ matrix.shell }}
+      - name: PowerShell 7 - second install must skip rather than re-download
         run: |
-          $out = ./install.ps1 -Prefix "$env:RUNNER_TEMP\mp" -Python 3.14 -EnvPrefix MPWINTEST -Isolated 2>&1 | Out-String
+          $out = ./install.ps1 -Prefix "$env:RUNNER_TEMP\mp-pwsh" -Python 3.14 -EnvPrefix MPWINTESTPW -Isolated 2>&1 | Out-String
           Write-Host $out
           if ($out -match 'Downloading uv') { throw "the second run re-downloaded uv: the skip branch did not fire" }
           if ($out -notmatch [regex]::Escape($env:UV_PIN)) { throw "the second run never reported the pinned uv version" }
           if ($out -notmatch 'venv already exists') { throw "the second run rebuilt the venv" }
 
-      - name: install.bat fallback path
+      - name: Windows PowerShell 5.1 via install.bat - first install
         shell: cmd
-        run: install.bat -Prefix "%RUNNER_TEMP%\mp-bat" -Python 3.14 -EnvPrefix MPWINTESTBAT -Isolated
+        run: install.bat -Prefix "%RUNNER_TEMP%\mp-bat" -Python 3.14 -EnvPrefix MPWINTESTBAT -Isolated > "%RUNNER_TEMP%\bat-first.txt" 2>&1
 
-      - name: Assert the install.bat fallback produced a working uv
-        shell: ${{ matrix.shell }}
+      - name: Windows PowerShell 5.1 via install.bat - second install must skip
+        shell: cmd
+        run: install.bat -Prefix "%RUNNER_TEMP%\mp-bat" -Python 3.14 -EnvPrefix MPWINTESTBAT -Isolated > "%RUNNER_TEMP%\bat-second.txt" 2>&1
+
+      - name: Windows PowerShell 5.1 - assert the uv and the skipped second run
         run: |
           $uv = "$env:RUNNER_TEMP\mp-bat\uv.exe"
           if (-not (Test-Path $uv)) { throw "install.bat did not produce uv.exe" }
           $actual = (& $uv --version 2>$null) -replace '^uv\s+(\S+).*', '$1'
           if ($actual -ne $env:UV_PIN) { throw "install.bat produced uv '$actual' but distro.toml pins '$env:UV_PIN'" }
+          Write-Host (Get-Content "$env:RUNNER_TEMP\bat-first.txt" -Raw)
+          $out = Get-Content "$env:RUNNER_TEMP\bat-second.txt" -Raw
+          Write-Host $out
+          if ($out -match 'Downloading uv') { throw "the second install.bat run re-downloaded uv: the skip branch did not fire under Windows PowerShell 5.1" }
+          if ($out -notmatch 'venv already exists') { throw "the second install.bat run rebuilt the venv" }

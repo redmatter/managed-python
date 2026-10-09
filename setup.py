@@ -536,6 +536,17 @@ def _parse_args() -> argparse.Namespace:
 
 def main() -> None:
     global _QUIET
+    # Windows pipes and redirected output default to a legacy code page (cp1252 or
+    # cp437), where the tick, info and box-drawing glyphs below cannot be encoded.
+    # Python then dies with UnicodeEncodeError part-way through an install, so any run
+    # that captures output (CI, `| Tee-Object`, a scheduled task writing a log) aborts
+    # with a traceback instead of an install. UTF-8 keeps the glyphs readable in modern
+    # logs, and the replace fallback means an unprintable character can never abort an
+    # install again.
+    for _stream in (sys.stdout, sys.stderr):
+        if hasattr(_stream, "reconfigure"):
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+
     args       = _parse_args()
     _QUIET     = args.quiet
     prefix     = Path(args.prefix).expanduser().resolve()

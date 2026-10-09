@@ -10,7 +10,12 @@ permissions:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    # Arm64 self-hosted fleet (cicd-github-actions 1.1). The runner image is
+    # almalinux:10 and installs the zip CLI and gh 2.102.0, which is everything this
+    # job uses; redmatter/nbinternal-skills creates releases with attached assets
+    # from the same fleet. The zip CLI preserves the executable bit on install.sh,
+    # which Python's zipfile would not.
+    runs-on: codebuild-ghSelfhostedRunnersArm64-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v6
 

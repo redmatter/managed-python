@@ -87,8 +87,15 @@ jobs:
 
       - name: PowerShell 7 - second install must skip rather than re-download
         run: |
-          $out = ./install.ps1 -Prefix "$env:RUNNER_TEMP\mp-pwsh" -Python 3.14 -EnvPrefix MPWINTESTPW -Isolated 2>&1 | Out-String
+          $uv = "$env:RUNNER_TEMP\mp-pwsh\uv.exe"
+          $before = (Get-Item $uv).LastWriteTimeUtc
+          # 6>&1 is load-bearing: install.ps1 reports through Write-Host, which goes to
+          # the information stream and is NOT captured by 2>&1 alone. Without it this
+          # step cannot see the installer's messages at all.
+          $out = ./install.ps1 -Prefix "$env:RUNNER_TEMP\mp-pwsh" -Python 3.14 -EnvPrefix MPWINTESTPW -Isolated 2>&1 6>&1 | Out-String
           Write-Host $out
+          # Behavioural check first, so rewording install.ps1 can never weaken this guard.
+          if ((Get-Item $uv).LastWriteTimeUtc -ne $before) { throw "uv.exe was rewritten: the second run re-downloaded it" }
           if ($out -match 'Downloading uv') { throw "the second run re-downloaded uv: the skip branch did not fire" }
           if ($out -notmatch [regex]::Escape($env:UV_PIN)) { throw "the second run never reported the pinned uv version" }
           if ($out -notmatch 'venv already exists') { throw "the second run rebuilt the venv" }

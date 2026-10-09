@@ -67,7 +67,9 @@ Write-Msg "  prefix  $Prefix"
 Write-Msg ""
 
 # Bootstrap uv
-$currentVer = if (Test-Path $UvExe) { try { (& $UvExe --version 2>$null) -split " " | Select-Object -Last 1 } catch { "" } } else { "" }
+# uv --version prints "uv <version> (<hash> <date> <target>)", so pull the token
+# after "uv ". Anchoring on the prefix also copes with repeated whitespace.
+$currentVer = if (Test-Path $UvExe) { try { (& $UvExe --version 2>$null) -replace '^uv\s+(\S+).*', '$1' } catch { "" } } else { "" }
 # uvx.exe must exist too - a prefix predating uvx can match the pinned version
 # while missing it entirely, and skipping the download would leave it that way.
 if (($currentVer -eq $UvVersion) -and (Test-Path $UvxExe)) {

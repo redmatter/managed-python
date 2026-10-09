@@ -198,8 +198,8 @@ The installed `distro.toml` at `<prefix>/distro.toml` records the options used d
 
 ```toml
 [distro]
-version = "1.0.0"
-uv_version = "0.10.6"
+version = "0.12.1"
+uv_version = "0.12.24"
 
 [install]
 prefix       = "/home/user/.local/redmatter/python"

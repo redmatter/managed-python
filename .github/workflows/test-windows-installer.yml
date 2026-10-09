@@ -87,7 +87,7 @@ jobs:
 
       - name: PowerShell 7 - second install must skip rather than re-download
         run: |
-          # 6>&1 is load-bearing: install.ps1 reports through Write-Host, which goes to
+          # Do not drop 6>&1: install.ps1 reports through Write-Host, which writes to
           # the information stream and is NOT captured by 2>&1 alone. Without it this
           # step cannot see the installer's messages at all.
           #

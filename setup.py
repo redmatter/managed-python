@@ -311,6 +311,14 @@ def _write_env_sh(prefix: Path, uv_env: str, uvx_env: str, python_env: str,
         "",
     ]
     lines += _cooldown_lines(cooldown, "#", 'export UV_EXCLUDE_NEWER="{}"')
+    lines += [
+        "# Pin uv's interpreter to the managed Python, unless one is already set.",
+        "# Without this, uv can pick an interpreter from PATH using cached metadata.",
+        'if [ -z "${UV_PYTHON:-}" ]; then',
+        f'    export UV_PYTHON="${{{python_env}}}"',
+        "fi",
+        "",
+    ]
 
     if _IS_WINDOWS:
         # bin/ wrappers on Windows are .cmd files — not usable in Git Bash.
@@ -371,6 +379,14 @@ def _write_env_ps1(prefix: Path, uv_env: str, uvx_env: str, python_env: str,
         lines.append('$env:PYTHONUTF8 = "1"')
     lines.append("")
     lines += _cooldown_lines(cooldown, "#", '$env:UV_EXCLUDE_NEWER = "{}"')
+    lines += [
+        "# Pin uv's interpreter to the managed Python, unless one is already set.",
+        "# Without this, uv can pick an interpreter from PATH using cached metadata.",
+        "if (-not $env:UV_PYTHON) {",
+        f'    $env:UV_PYTHON = "$env:{python_env}"',
+        "}",
+        "",
+    ]
 
     if add_to_path:
         lines += [f"# {n}" for n in notes]
@@ -414,6 +430,12 @@ def _write_env_bat(prefix: Path, uv_env: str, uvx_env: str, python_env: str,
         "",
     ]
     lines += _cooldown_lines(cooldown, "::", "SET UV_EXCLUDE_NEWER={}")
+    lines += [
+        ":: Pin uv's interpreter to the managed Python, unless one is already set.",
+        ":: Without this, uv can pick an interpreter from PATH using cached metadata.",
+        f"IF NOT DEFINED UV_PYTHON SET UV_PYTHON=%{python_env}%",
+        "",
+    ]
 
     if add_to_path:
         lines += [f":: {n}" for n in notes]

@@ -150,6 +150,22 @@ The cooldown is a default, not a cage. A command-line flag beats the env var:
 > [!IMPORTANT]
 > `UV_EXCLUDE_NEWER` is uv's own environment variable, so unlike `REDMATTER_UV` it cannot be namespaced. Sourcing `env.sh` therefore applies the cooldown to **any** `uv` on your `PATH`, not just the managed one. To get a completely untouched uv in the shell you are already in, run `unset UV_EXCLUDE_NEWER` — reinstalling with `--cooldown P0D` only comments the assignment out, which affects new shells and future sources, not the current one.
 
+## Interpreter preference
+
+Every install sets `UV_PYTHON_PREFERENCE="managed"` in the generated env files, so uv prefers an interpreter it manages over one found on `PATH`. This fixes the case where a repository sets `python-preference = "system"` in its `pyproject.toml`, which makes uv pick a PATH Python whose cached metadata may be stale.
+
+It is a preference, not a pin. It only narrows which interpreters discovery may consider, so project rules still govern:
+
+- A project's `requires-python` and `.python-version` still choose the interpreter uv runs.
+- `uv pip install` inside a project with its own `.venv` still installs into that `.venv`, not into the managed venv.
+- An existing `.venv` built on a system interpreter is left alone.
+
+> [!IMPORTANT]
+> `UV_PYTHON_PREFERENCE` is uv's own environment variable, so unlike `REDMATTER_UV` it cannot be namespaced. Sourcing `env.sh` therefore applies the preference to **any** `uv` on your `PATH`, not just the managed one. Override it for one command with `UV_PYTHON_PREFERENCE=only-system uv ...`, or clear it in the shell you are already in with `unset UV_PYTHON_PREFERENCE`. The generated files only set the variable when it is empty, so a value you export yourself always wins.
+
+> [!NOTE]
+> `only-managed` is the stricter value, but it also replaces an existing `.venv` that sits on a system interpreter. That would rebuild venvs across your repos, so this install uses `managed`.
+
 ## Usage
 
 ```bash

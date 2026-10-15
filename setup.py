@@ -311,6 +311,17 @@ def _write_env_sh(prefix: Path, uv_env: str, uvx_env: str, python_env: str,
         "",
     ]
     lines += _cooldown_lines(cooldown, "#", 'export UV_EXCLUDE_NEWER="{}"')
+    lines += [
+        "# Prefer a uv-managed interpreter. A Python found on PATH is used only when no",
+        "# installed managed build satisfies the request, and an existing project",
+        "# environment is kept, unless it does not match the project's Python.",
+        "# Not a UV_PYTHON pin: a pin would capture 'uv pip install' destinations and",
+        "# override project version requirements. This only narrows what may run.",
+        'if [ -z "${UV_PYTHON_PREFERENCE:-}" ]; then',
+        '    export UV_PYTHON_PREFERENCE="managed"',
+        "fi",
+        "",
+    ]
 
     if _IS_WINDOWS:
         # bin/ wrappers on Windows are .cmd files — not usable in Git Bash.
@@ -371,6 +382,17 @@ def _write_env_ps1(prefix: Path, uv_env: str, uvx_env: str, python_env: str,
         lines.append('$env:PYTHONUTF8 = "1"')
     lines.append("")
     lines += _cooldown_lines(cooldown, "#", '$env:UV_EXCLUDE_NEWER = "{}"')
+    lines += [
+        "# Prefer a uv-managed interpreter. A Python found on PATH is used only when no",
+        "# installed managed build satisfies the request, and an existing project",
+        "# environment is kept, unless it does not match the project's Python.",
+        "# Not a UV_PYTHON pin: a pin would capture 'uv pip install' destinations and",
+        "# override project version requirements. This only narrows what may run.",
+        "if (-not $env:UV_PYTHON_PREFERENCE) {",
+        '    $env:UV_PYTHON_PREFERENCE = "managed"',
+        "}",
+        "",
+    ]
 
     if add_to_path:
         lines += [f"# {n}" for n in notes]
@@ -414,6 +436,15 @@ def _write_env_bat(prefix: Path, uv_env: str, uvx_env: str, python_env: str,
         "",
     ]
     lines += _cooldown_lines(cooldown, "::", "SET UV_EXCLUDE_NEWER={}")
+    lines += [
+        ":: Prefer a uv-managed interpreter. A Python found on PATH is used only when no",
+        ":: installed managed build satisfies the request, and an existing project",
+        ":: environment is kept, unless it does not match the project's Python.",
+        ":: Not a UV_PYTHON pin: a pin would capture 'uv pip install' destinations and",
+        ":: override project version requirements. This only narrows what may run.",
+        "IF NOT DEFINED UV_PYTHON_PREFERENCE SET UV_PYTHON_PREFERENCE=managed",
+        "",
+    ]
 
     if add_to_path:
         lines += [f":: {n}" for n in notes]

@@ -152,19 +152,20 @@ The cooldown is a default, not a cage. A command-line flag beats the env var:
 
 ## Interpreter preference
 
-Every install sets `UV_PYTHON_PREFERENCE="managed"` in the generated env files, so uv prefers an interpreter it manages over one found on `PATH`. This fixes the case where a repository sets `python-preference = "system"` in its `pyproject.toml`, which makes uv pick a PATH Python whose cached metadata may be stale.
+Every install sets `UV_PYTHON_PREFERENCE="only-managed"` in the generated env files, so uv may use only an interpreter it manages. A Python found on `PATH` is not used. This closes the failure that motivated the change: a leftover interpreter from a build tree was sitting on `PATH`, uv picked it, and it could not start.
 
-It is a preference, not a pin. It only narrows which interpreters discovery may consider, so project rules still govern:
+The strictness has costs, and they are worth knowing before you source the file:
 
-- A project's `requires-python` and `.python-version` still choose the interpreter uv runs.
-- `uv pip install` inside a project with its own `.venv` still installs into that `.venv`, not into the managed venv.
-- An existing `.venv` built on a system interpreter is left alone.
+- An existing `.venv` built on a system interpreter is replaced with one built on a managed interpreter.
+- When no managed interpreter for the requested version is installed yet, uv installs one. That download may be a pre-release - a request for 3.15 pulled `3.15.0a7`.
+
+It is a preference, not a pin. Version choice still belongs to the project:
+
+- A project's `requires-python` and `.python-version` still choose which version runs.
+- `uv pip install` targets an activated environment or the nearest `.venv`, by uv's own rules. This setting does not change that.
 
 > [!IMPORTANT]
-> `UV_PYTHON_PREFERENCE` is uv's own environment variable, so unlike `REDMATTER_UV` it cannot be namespaced. Sourcing `env.sh` therefore applies the preference to **any** `uv` on your `PATH`, not just the managed one. Override it for one command with `UV_PYTHON_PREFERENCE=only-system uv ...`, or clear it in the shell you are already in with `unset UV_PYTHON_PREFERENCE`. The generated files only set the variable when it is empty, so a value you export yourself always wins.
-
-> [!NOTE]
-> `only-managed` is the stricter value, but it also replaces an existing `.venv` that sits on a system interpreter. That would rebuild venvs across your repos, so this install uses `managed`.
+> `UV_PYTHON_PREFERENCE` is uv's own environment variable, so unlike `REDMATTER_UV` it cannot be namespaced. Sourcing `env.sh` therefore applies the preference to **any** `uv` on your `PATH`, not just the managed one. Override it for one command with `UV_PYTHON_PREFERENCE=system uv ...`, or clear it in the shell you are already in with `unset UV_PYTHON_PREFERENCE`. The generated files only set the variable when it is empty, so a value you export yourself always wins.
 
 ## Usage
 

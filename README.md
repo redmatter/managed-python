@@ -152,27 +152,22 @@ The cooldown is a default, not a cage. A command-line flag beats the env var:
 
 ## Interpreter preference
 
-Every install sets `UV_PYTHON_PREFERENCE="managed"` in the generated env files, but only when the variable is unset. If you already export a value, it is left alone.
+Every install sets `UV_PYTHON_PREFERENCE="managed"` in the generated env files, but only when the variable is unset or empty. If you already export a value, it is left alone.
 
-Setting `managed` makes uv prefer an interpreter it manages itself over one it finds on `PATH`. It also leaves an existing project environment, such as a `.venv`, alone - no eviction notice.
+`managed` makes uv prefer an interpreter it manages itself over one it finds on `PATH`. It does not reject an existing project environment just because a system Python raised it - no eviction notice. Normal checks still apply, so a `.venv` that does not match the project's Python version is still replaced.
 
-That preference is what keeps the original fault out. Measured on 2026-10-14 against uv 0.10.12, in a directory carrying a project configuration that asks for a system interpreter:
+`managed` is already uv's own default, so in a project with no interpreter configuration this setting changes nothing. Its effect is to override a configuration that asks for a system interpreter, such as `python-preference = "system"` in a project's `pyproject.toml`. The original fault appeared in exactly that shape, which is the case this guard is for.
 
-| `UV_PYTHON_PREFERENCE` | Interpreter uv picked for Python 3.14 |
-| ---------------------- | ------------------------------------- |
-| unset | `/opt/homebrew/opt/python@3.14/bin/python3.14` |
-| `managed` | `~/.local/share/uv/python/cpython-3.14-macos-aarch64-none/bin/python3.14` |
-
-There is one limit to know about. `managed` is a preference, not a wall. When no installed managed build satisfies the requested version, uv still falls back to a Python found on `PATH`. The same test with Python 3.15, which has no managed build here, resolved to `/opt/homebrew/opt/python@3.15/bin/python3.15`. So a broken interpreter on `PATH` can still be chosen for a version that has no managed build.
+There is one limit to know about. `managed` is a preference, not a wall, and it is not a health check on the interpreter it picks. When no installed managed interpreter satisfies the request, uv falls back to a Python found on `PATH`. That is not limited to unusual versions: on a machine with no managed 3.14 installed, a request for 3.14 can resolve to a system Python. Measured on 2026-10-14 against uv 0.10.12: a request for Python 3.15, for which no managed interpreter was installed, resolved to `/opt/homebrew/opt/python@3.15/bin/python3.15`. So a broken interpreter on `PATH` remains reachable whenever no installed managed interpreter satisfies the request, and an existing `.venv` built on one is still used.
 
 This setting is an extra guard, not the fix. The direct fix for the original fault was removing the dead symlinks in `~/.local/bin` that pointed at a broken interpreter.
 
 It is a preference, not a pin, and the difference matters:
 
-- A `UV_PYTHON` pin would name the exact interpreter that `uv pip install` writes into. It would also override a project's own version requirement (`requires-python`, `.python-version`). `UV_PYTHON_PREFERENCE` does neither. It only narrows which interpreter uv reaches for, so the project keeps control of its own version.
+- A `UV_PYTHON` pin would name the exact interpreter that `uv pip install` writes into. It would also override normal interpreter selection, including `.python-version`, and where the project sets `requires-python`, uv checks the pinned interpreter against it and fails on a conflict. `UV_PYTHON_PREFERENCE` does neither. It only narrows which interpreter uv reaches for, so the project keeps control of its own version.
 
 > [!IMPORTANT]
-> `UV_PYTHON_PREFERENCE` is uv's own environment variable, so unlike `REDMATTER_UV` it cannot be namespaced. Sourcing `env.sh` therefore applies the preference to **any** `uv` on your `PATH`, not just the managed one. A shell-wide value also outranks a repository's own `[tool.uv] python-preference` setting. Override it for one command with `UV_PYTHON_PREFERENCE=system uv ...`, or clear it in the shell you are already in with `unset UV_PYTHON_PREFERENCE`. The generated files only set the variable when it is empty, so a value you export yourself always wins.
+> `UV_PYTHON_PREFERENCE` is uv's own environment variable, so unlike `REDMATTER_UV` it cannot be namespaced. Sourcing `env.sh` therefore applies the preference to **any** `uv` on your `PATH`, not just the managed one. A shell-wide value also outranks a repository's own `[tool.uv] python-preference` setting. Override it for one command with `UV_PYTHON_PREFERENCE=system uv ...`, or clear it in the shell you are already in with `unset UV_PYTHON_PREFERENCE`. The generated files only set the variable when it is unset or empty, so a value you export yourself always wins.
 
 ## Usage
 

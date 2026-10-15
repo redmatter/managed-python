@@ -152,20 +152,27 @@ The cooldown is a default, not a cage. A command-line flag beats the env var:
 
 ## Interpreter preference
 
-Every install sets `UV_PYTHON_PREFERENCE="only-managed"` in the generated env files, so uv may use only an interpreter it manages. A Python found on `PATH` is not used. This closes the failure that motivated the change: a leftover interpreter from a build tree was sitting on `PATH`, uv picked it, and it could not start.
+Every install sets `UV_PYTHON_PREFERENCE="managed"` in the generated env files, but only when the variable is unset. If you already export a value, it is left alone.
 
-The strictness has costs, and they are worth knowing before you source the file:
+Setting `managed` makes uv prefer an interpreter it manages itself over one it finds on `PATH`. It also leaves an existing project environment, such as a `.venv`, alone - no eviction notice.
 
-- An existing `.venv` built on a system interpreter is replaced with one built on a managed interpreter.
-- When no managed interpreter for the requested version is installed yet, uv installs one. That download may be a pre-release - a request for 3.15 pulled `3.15.0a7`.
+That preference is what keeps the original fault out. Measured on 2026-10-14 against uv 0.10.12, in a directory carrying a project configuration that asks for a system interpreter:
 
-It is a preference, not a pin. Version choice still belongs to the project:
+| `UV_PYTHON_PREFERENCE` | Interpreter uv picked for Python 3.14 |
+| ---------------------- | ------------------------------------- |
+| unset | `/opt/homebrew/opt/python@3.14/bin/python3.14` |
+| `managed` | `~/.local/share/uv/python/cpython-3.14-macos-aarch64-none/bin/python3.14` |
 
-- A project's `requires-python` and `.python-version` still choose which version runs.
-- `uv pip install` targets an activated environment or the nearest `.venv`, by uv's own rules. This setting does not change that.
+There is one limit to know about. `managed` is a preference, not a wall. When no installed managed build satisfies the requested version, uv still falls back to a Python found on `PATH`. The same test with Python 3.15, which has no managed build here, resolved to `/opt/homebrew/opt/python@3.15/bin/python3.15`. So a broken interpreter on `PATH` can still be chosen for a version that has no managed build.
+
+This setting is an extra guard, not the fix. The direct fix for the original fault was removing the dead symlinks in `~/.local/bin` that pointed at a broken interpreter.
+
+It is a preference, not a pin, and the difference matters:
+
+- A `UV_PYTHON` pin would name the exact interpreter that `uv pip install` writes into. It would also override a project's own version requirement (`requires-python`, `.python-version`). `UV_PYTHON_PREFERENCE` does neither. It only narrows which interpreter uv reaches for, so the project keeps control of its own version.
 
 > [!IMPORTANT]
-> `UV_PYTHON_PREFERENCE` is uv's own environment variable, so unlike `REDMATTER_UV` it cannot be namespaced. Sourcing `env.sh` therefore applies the preference to **any** `uv` on your `PATH`, not just the managed one. Override it for one command with `UV_PYTHON_PREFERENCE=system uv ...`, or clear it in the shell you are already in with `unset UV_PYTHON_PREFERENCE`. The generated files only set the variable when it is empty, so a value you export yourself always wins.
+> `UV_PYTHON_PREFERENCE` is uv's own environment variable, so unlike `REDMATTER_UV` it cannot be namespaced. Sourcing `env.sh` therefore applies the preference to **any** `uv` on your `PATH`, not just the managed one. A shell-wide value also outranks a repository's own `[tool.uv] python-preference` setting. Override it for one command with `UV_PYTHON_PREFERENCE=system uv ...`, or clear it in the shell you are already in with `unset UV_PYTHON_PREFERENCE`. The generated files only set the variable when it is empty, so a value you export yourself always wins.
 
 ## Usage
 

@@ -312,11 +312,13 @@ def _write_env_sh(prefix: Path, uv_env: str, uvx_env: str, python_env: str,
     ]
     lines += _cooldown_lines(cooldown, "#", 'export UV_EXCLUDE_NEWER="{}"')
     lines += [
-        "# Allow only uv-managed interpreters - a Python found on PATH is never used.",
+        "# Prefer a uv-managed interpreter. A Python found on PATH is used only when no",
+        "# installed managed build satisfies the request, and an existing project",
+        "# environment is always kept.",
         "# Not a UV_PYTHON pin: a pin would capture 'uv pip install' destinations and",
         "# override project version requirements. This only narrows what may run.",
         'if [ -z "${UV_PYTHON_PREFERENCE:-}" ]; then',
-        '    export UV_PYTHON_PREFERENCE="only-managed"',
+        '    export UV_PYTHON_PREFERENCE="managed"',
         "fi",
         "",
     ]
@@ -381,11 +383,13 @@ def _write_env_ps1(prefix: Path, uv_env: str, uvx_env: str, python_env: str,
     lines.append("")
     lines += _cooldown_lines(cooldown, "#", '$env:UV_EXCLUDE_NEWER = "{}"')
     lines += [
-        "# Allow only uv-managed interpreters - a Python found on PATH is never used.",
+        "# Prefer a uv-managed interpreter. A Python found on PATH is used only when no",
+        "# installed managed build satisfies the request, and an existing project",
+        "# environment is always kept.",
         "# Not a UV_PYTHON pin: a pin would capture 'uv pip install' destinations and",
         "# override project version requirements. This only narrows what may run.",
         "if (-not $env:UV_PYTHON_PREFERENCE) {",
-        '    $env:UV_PYTHON_PREFERENCE = "only-managed"',
+        '    $env:UV_PYTHON_PREFERENCE = "managed"',
         "}",
         "",
     ]
@@ -433,10 +437,12 @@ def _write_env_bat(prefix: Path, uv_env: str, uvx_env: str, python_env: str,
     ]
     lines += _cooldown_lines(cooldown, "::", "SET UV_EXCLUDE_NEWER={}")
     lines += [
-        ":: Allow only uv-managed interpreters - a Python found on PATH is never used.",
+        ":: Prefer a uv-managed interpreter. A Python found on PATH is used only when no",
+        ":: installed managed build satisfies the request, and an existing project",
+        ":: environment is always kept.",
         ":: Not a UV_PYTHON pin: a pin would capture 'uv pip install' destinations and",
         ":: override project version requirements. This only narrows what may run.",
-        "IF NOT DEFINED UV_PYTHON_PREFERENCE SET UV_PYTHON_PREFERENCE=only-managed",
+        "IF NOT DEFINED UV_PYTHON_PREFERENCE SET UV_PYTHON_PREFERENCE=managed",
         "",
     ]
 

@@ -6,12 +6,13 @@ Installation is split into two phases:
 
 ```text
 install.sh / install.ps1   →   setup.py   →   configured prefix
-  (bootstrap: uv + venv)       (configure: everything else)
+  (bootstrap: uv + venv + pinned pyyaml)   (configure: everything else)
 ```
 
-**Bootstrap scripts** (`install.sh`, `install.ps1`) are minimal — they exist only because
-downloading a binary and creating a venv require platform-specific shell syntax before Python is
-available. Once the venv exists, control passes immediately to `setup.py`.
+**Bootstrap scripts** (`install.sh`, `install.ps1`) are minimal — they exist because downloading a
+binary, creating a venv, and installing the one pinned bootstrap package require platform-specific
+shell syntax before Python is available. Once the venv exists, control passes immediately to
+`setup.py`.
 
 **`setup.py`** runs inside the freshly-created venv and handles all logic that would otherwise be
 duplicated across bash and PowerShell: bin/ wrappers, env.sh, env.ps1, distro.toml copy, shell
@@ -20,9 +21,10 @@ profile update. It is pure stdlib with no external dependencies.
 ## What Goes Where
 
 | Concern | Script |
-|---------|--------|
+| --------- | -------- |
 | Download uv binary | `install.sh` / `install.ps1` |
 | Create Python venv | `install.sh` / `install.ps1` |
+| Install pinned `pyyaml` into the venv | `install.sh` / `install.ps1` |
 | Write `env.sh` / `env.ps1` / `env.bat` | `setup.py` |
 | Create `bin/` wrappers / symlinks | `setup.py` |
 | PATH detection logic | `setup.py` |
@@ -35,17 +37,23 @@ profile update. It is pure stdlib with no external dependencies.
 ### setup.py is stdlib-only, always
 
 `setup.py` must never import anything outside the Python standard library. It runs inside a
-freshly-created venv that has no packages installed. Any helper logic that might seem to warrant a
-library (TOML parsing, path manipulation, HTTP) must be implemented with stdlib primitives.
+freshly-created venv whose only non-stdlib package is the pinned `pyyaml`, which it does not use.
+Any helper logic that might seem to warrant a library (TOML parsing, path manipulation, HTTP) must
+be implemented with stdlib primitives.
 
 The moment `setup.py` gains a dependency, bootstrap becomes circular.
 
 ### Shell scripts do the minimum necessary
 
-`install.sh` and `install.ps1` exist for exactly two reasons: (1) downloading a binary requires
-curl/wget or Invoke-WebRequest, and (2) creating a venv requires the uv binary that was just
-downloaded. No PATH logic, no env file generation, and no output formatting beyond simple progress
-lines belongs in the shell scripts.
+`install.sh` and `install.ps1` exist for three reasons: (1) downloading a binary requires curl/wget
+or Invoke-WebRequest, (2) creating a venv requires the uv binary that was just downloaded, and
+(3) installing the one pinned bootstrap package (`pyyaml`) must happen after the venv exists but
+before `setup.py` hands over. No PATH logic, no env file generation, and no output formatting beyond
+simple progress lines belongs in the shell scripts.
+
+The bootstrap package set stays deliberately tiny: an exact pin to an immutable release is the
+control for that dependency, so it needs no resolution policy and no cooldown. Anything more than a
+single pinned package starts to look like configuration, which is `setup.py`'s job.
 
 ### Env vars are the contract, PATH is a convenience
 
@@ -79,6 +87,13 @@ python release.py --uv-version X.Y.Z   # also updates pinned checksums
 ```
 
 Add `--tag` to commit `distro.toml` and create a git tag in one step.
+
+`pyyaml_version` is the third pin in `distro.toml`, and this note is its authoritative home.
+`release.py` deliberately does not manage it: the bootstrap package set is one exact pin to an
+immutable release (see [Design Principles](#shell-scripts-do-the-minimum-necessary)), so a bump is
+a rare, considered act rather than a routine flag. Edit it directly in whichever commit needs the
+new wheel - there is no `--pyyaml-version` flag. [RELEASING.md](RELEASING.md) points here rather
+than restating the rule.
 
 ## Reporting Security Issues
 
